@@ -15,9 +15,12 @@ HOME = Path(
         Path.home() / "Library" / "Application Support" / "Pianke",
     )
 )
+# read-only inputs: the repo's data/ in development, the app bundle's
+# Resources/data when installed (the Electron main process sets PIANKE_DATA)
+DATA_DIR = Path(os.environ.get("PIANKE_DATA", REPO / "data"))
 MODELS_DIR = Path(os.environ.get("PIANKE_MODELS", REPO / "models"))
-CATALOG_DB = Path(os.environ.get("PIANKE_CATALOG", REPO / "data" / "catalog.sqlite"))
-LIBRARY_DB = Path(os.environ.get("PIANKE_LIBRARY", REPO / "data" / "library.sqlite"))
+CATALOG_DB = Path(os.environ.get("PIANKE_CATALOG", DATA_DIR / "catalog.sqlite"))
+LIBRARY_DB = Path(os.environ.get("PIANKE_LIBRARY", DATA_DIR / "library.sqlite"))
 USER_DB = HOME / "user.sqlite"
 # public lookups (covers, titles found online) — no user data, safe to delete
 CACHE_DB = HOME / "cache.sqlite"

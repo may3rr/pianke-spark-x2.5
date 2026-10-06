@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- macOS icon grid: an 824px body with a 185px corner, 100px margin for the shadow -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7472f2"/>
+      <stop offset="1" stop-color="#4644c4"/>
+    </linearGradient>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#drop)"/>
+  <!-- the 影视 shelf's moon; the stars stand clear of it at this size -->
+  <g transform="translate(205 225) scale(22)" fill="#fff">
+    <path d="M14.6 2.6a.9.9 0 0 0-1.1 1.1 7.6 7.6 0 0 1-9.8 9.8.9.9 0 0 0-1.1 1.1A10 10 0 1 0 14.6 2.6z"/>
+    <path transform="translate(3.2 -1.8)" d="M18.6 3.2l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5zM21 8.6l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z"/>
+  </g>
+</svg>

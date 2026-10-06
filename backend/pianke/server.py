@@ -20,7 +20,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .catalog import library
 from .catalog import search as catalog
-from .config import USER_DB
+from .config import DATA_DIR, USER_DB
 from .domains import DOMAINS, PASS_REASONS, WORDS, reason_label
 from .flows import feedback as feedback_flow
 from .flows import interview as interview_flow
@@ -157,11 +157,7 @@ def status() -> dict:
 @app.get("/usage", dependencies=[Depends(auth)])
 def usage() -> dict:
     bench_path = os.path.join(os.path.dirname(USER_DB), "bench_speed.json")
-    repo_bench = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "data",
-        "bench_speed.json",
-    )
+    repo_bench = str(DATA_DIR / "bench_speed.json")
     bench = None
     for p in (bench_path, repo_bench):
         if os.path.exists(p):

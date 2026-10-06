@@ -123,6 +123,19 @@ PIANKE_PYTHON=$(which python) npm run dev
 
 专辑封面先查网易云音乐（不需要 Key，约 0.2 秒一张），再查维基百科、Cover Art Archive 和 iTunes。启动时会在后台把你的记录和最近推荐过的作品的封面先取下来。
 
+### 打包成 Mac 应用
+
+```bash
+cd app
+PIANKE_PYTHON=$(which python3.11) npm run dist
+```
+
+依次做三件事：用 PyInstaller 把 Python 后端打成独立程序（`scripts/build-backend.sh`，用自己的 `backend/.venv`，不改动你的 Python 环境）；用 electron-builder 生成 `release/mac-arm64/片刻.app`；用 macOS 自带的 hdiutil 生成 `release/片刻-0.1.0-arm64.dmg`（`scripts/make-dmg.sh`）。打开 dmg，把「片刻」拖进「应用程序」即可。
+
+安装包约 400 MB，包含界面、后端、片库和书库，不含模型。用本机模式时，把两个 gguf 放进 `~/Library/Application Support/Pianke/models/`，或者在那里建一个指向已有模型目录的链接；用 OpenAI 兼容接口时不需要模型。后端日志在同目录的 `backend.log`。应用没有签名，只在打包的这台 Mac 上直接打开；拷到别的 Mac 上要右键选「打开」。
+
+图标的源文件是 `app/scripts/icon.svg`，改了之后运行 `npx electron scripts/make-icon.mjs` 重新生成 `build/icon.icns`。
+
 用户数据只存在 `~/Library/Application Support/Pianke/user.sqlite`。同目录下的 `cache.sqlite` 和 `covers/` 只放公开的作品信息和封面，可以随时删除。
 
 ## 实测（Apple M3 Pro，18GB，2026-10-05）

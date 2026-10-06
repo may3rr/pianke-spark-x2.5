@@ -132,6 +132,18 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+@lru_cache(maxsize=1)
+def _opencc():
+    from opencc import OpenCC
+
+    return OpenCC("t2s")
+
+
+def _t2s(s: str) -> str:
+    """Chinese titles are stored simplified; 《路邊野餐》 should find them too."""
+    return _opencc().convert(s) if s and re.search(r"[\u4e00-\u9fff]", s) else s
+
+
 @lru_cache(maxsize=4096)
 def _candidates(q: str) -> tuple[sqlite3.Row, ...]:
     c = _con()
@@ -170,7 +182,7 @@ def resolve(title: str, year: int | None = None, original: str | None = None, *,
 
 
 def _resolve_local(title: str, year: int | None, original: str | None) -> dict | None:
-    queries = [q for q in {_norm(title), _norm(original or "")} if q]
+    queries = [q for q in {_norm(_t2s(title)), _norm(_t2s(original or ""))} if q]
     best: tuple[float, sqlite3.Row] | None = None
     for q in queries:
         for r in _candidates(q):
@@ -196,7 +208,7 @@ def _resolve_local(title: str, year: int | None, original: str | None) -> dict |
 
 
 def search(q: str, limit: int = 12, *, use_online: bool = False) -> list[dict]:
-    raw, q = q, _norm(q)
+    raw, q = q, _norm(_t2s(q))
     if not q:
         return []
     rows = list(_candidates(q))

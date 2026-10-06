@@ -5,10 +5,14 @@ import net from 'node:net'
 import path from 'node:path'
 import fs from 'node:fs'
 
-// dev: the conda env and the repo's backend/; the backend in turn starts the
-// two llama-server processes (Spark-X2.5 4B and 1.7B) on loopback ports
-const PYTHON = process.env.PIANKE_PYTHON || '/opt/anaconda3/envs/claude/bin/python'
+// dev: a Python 3.11+ with the backend's dependencies and the repo's backend/.
+// installed: the frozen backend and the catalogs in the bundle's Resources
+// (see scripts/build-backend.sh). Either way the backend starts the two
+// llama-server processes (Spark-X2.5 4B and 1.7B) on loopback ports.
+const PYTHON = process.env.PIANKE_PYTHON || 'python3'
 const BACKEND_DIR = path.resolve(import.meta.dirname, '../../../backend')
+// where the backend keeps the user's data; models live here once installed
+const PIANKE_HOME = process.env.PIANKE_HOME || path.join(app.getPath('appData'), 'Pianke')
 const TOKEN = randomBytes(32).toString('hex')
 const THEME = process.env.PIANKE_THEME
 /** UI driver for screenshots and demo recording: a JSON list of steps */
@@ -47,16 +51,33 @@ function freePort(): Promise<number> {
 
 async function startBackend(): Promise<void> {
   if (!(await portFree(port))) port = await freePort()
-  backend = spawn(
-    PYTHON,
-    ['-m', 'uvicorn', 'pianke.server:app', '--host', '127.0.0.1', '--port', String(port)],
-    {
-      cwd: BACKEND_DIR,
-      env: { ...process.env, PIANKE_TOKEN: TOKEN },
-    }
-  )
-  backend.stdout?.on('data', (d) => process.stdout.write(`[backend] ${d}`))
-  backend.stderr?.on('data', (d) => process.stderr.write(`[backend] ${d}`))
+  if (app.isPackaged) {
+    const res = process.resourcesPath
+    fs.mkdirSync(PIANKE_HOME, { recursive: true })
+    const log = fs.createWriteStream(path.join(PIANKE_HOME, 'backend.log'), { flags: 'w' })
+    backend = spawn(path.join(res, 'backend', 'pianke-backend'), ['--port', String(port)], {
+      env: {
+        ...process.env,
+        PIANKE_TOKEN: TOKEN,
+        PIANKE_HOME,
+        PIANKE_DATA: path.join(res, 'data'),
+        PIANKE_MODELS: process.env.PIANKE_MODELS || path.join(PIANKE_HOME, 'models'),
+      },
+    })
+    backend.stdout?.pipe(log)
+    backend.stderr?.pipe(log)
+  } else {
+    backend = spawn(
+      PYTHON,
+      ['-m', 'uvicorn', 'pianke.server:app', '--host', '127.0.0.1', '--port', String(port)],
+      {
+        cwd: BACKEND_DIR,
+        env: { ...process.env, PIANKE_TOKEN: TOKEN },
+      }
+    )
+    backend.stdout?.on('data', (d) => process.stdout.write(`[backend] ${d}`))
+    backend.stderr?.on('data', (d) => process.stderr.write(`[backend] ${d}`))
+  }
   backend.on('error', (e) => {
     backendError = `spawn: ${e.message}`
     win?.webContents.send('pianke:backend-error', backendError)

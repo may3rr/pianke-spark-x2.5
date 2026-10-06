@@ -11,7 +11,8 @@
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/shots.mjs",
+    "dist": "./scripts/build-backend.sh && electron-vite build && electron-builder --mac --arm64 && ./scripts/make-dmg.sh"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -33,5 +34,42 @@
     "vite": "7.3.6",
     "vitest": "4.1.11"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "build": {
+    "appId": "app.pianke.desktop",
+    "productName": "片刻",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend/pianke-backend",
+        "to": "backend"
+      },
+      {
+        "from": "../data",
+        "to": "data",
+        "filter": [
+          "catalog.sqlite",
+          "library.sqlite",
+          "bench_speed.json"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dir"
+      ],
+      "identity": null,
+      "darkModeSupport": true
+    },
+    "electronDist": "node_modules/electron/dist",
+    "npmRebuild": false
+  }
 }
