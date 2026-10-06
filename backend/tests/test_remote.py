@@ -23,7 +23,7 @@ def api(tmp_path, monkeypatch):
     from pianke.llm import client, settings
     from pianke.llm.runtime import runtime
 
-    monkeypatch.setattr(settings, "PATH", tmp_path / "llm.json")
+    monkeypatch.setattr(settings, "PATH", tmp_path / "settings.json")
     client._quirks.clear()
     s = settings.save({"mode": "api", "base_url": "https://api.example.com/v1/",
                        "api_key": "sk-test-123456789", "big_model": "big-m", "small_model": ""})
@@ -146,7 +146,7 @@ def test_local_models_wait_for_first_use(tmp_path, monkeypatch):
     from pianke.llm import runtime as rt
     from pianke.llm import settings
 
-    monkeypatch.setattr(settings, "PATH", tmp_path / "llm.json")
+    monkeypatch.setattr(settings, "PATH", tmp_path / "settings.json")
     monkeypatch.delenv("PIANKE_PRELOAD", raising=False)
     r = rt.Runtime()
     started = []

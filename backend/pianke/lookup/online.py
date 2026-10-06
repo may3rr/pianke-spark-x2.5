@@ -3,7 +3,9 @@ pages covers come from. Inputs are titles / creators / years only.
 
   books   Douban book suggest (best coverage of Chinese editions)
   albums  iTunes Search (Chinese and Western catalogues, artwork)
-  films   Douban movie suggest, for posters only — films resolve locally
+  films   TMDB by IMDb id when the user set a key, else Douban movie
+          suggest; posters only — films resolve locally
+  covers  NetEase Cloud Music album search (no key, fast) before iTunes
 
 A work found online is saved as an ext record (bk:db… / mu:it…) so the rest
 of the app can treat it like a shelf entry."""
@@ -17,6 +19,7 @@ from opencc import OpenCC
 from rapidfuzz import fuzz
 
 from ..catalog.vocab import ALBUM_GENRES, map_genres
+from ..llm import settings
 from . import net
 
 t2s = OpenCC("t2s").convert
@@ -250,4 +253,60 @@ def film_poster(name: str, original: str, year: int | None) -> str | None:
             close = max(fuzz.ratio(_norm(q), n) for n in names) >= 70
             if close and (not year or not y or abs(y - year) <= 1):
                 return r["img"].replace("s_ratio_poster", "m_ratio_poster")
+    return None
+
+
+# ---------------------------------------------------------------- TMDB
+
+TMDB_FIND = "https://api.themoviedb.org/3/find/{id}"
+TMDB_IMG = "https://image.tmdb.org/t/p/w342"
+
+
+def _tmdb_auth() -> dict | None:
+    key = settings.load()["tmdb_key"]
+    if not key:
+        return None
+    # v4 read access tokens are JWTs; v3 keys go in the query string
+    return {"headers": {"Authorization": f"Bearer {key}"}} if key.startswith("eyJ") else {"auth": {"api_key": key}}
+
+
+def tmdb_film(imdb_id: str, lane: str = "bg") -> dict | None:
+    """TMDB's record for an IMDb id, Chinese title and overview where TMDB
+    has them. One request, no search, so it is exact and fast."""
+    auth = _tmdb_auth()
+    if not auth or not imdb_id.startswith("tt"):
+        return None
+    data = net.get_json(TMDB_FIND.format(id=imdb_id), {"external_source": "imdb_id", "language": "zh-CN"},
+                        lane=lane, **auth)
+    for k in ("movie_results", "tv_results"):
+        rows = (data or {}).get(k) or []
+        if rows:
+            return rows[0]
+    return None
+
+
+def tmdb_poster(imdb_id: str) -> str | None:
+    r = tmdb_film(imdb_id)
+    return f"{TMDB_IMG}{r['poster_path']}" if r and r.get("poster_path") else None
+
+
+# ---------------------------------------------------------------- NetEase
+
+NETEASE_SEARCH = "https://music.163.com/api/search/get"
+
+
+def netease_cover(title: str, artist: str | None) -> str | None:
+    """Album art from NetEase Cloud Music's search: no key, ~0.2 s, strong on
+    Chinese and Western catalogues alike. Strict on title and artist, since a
+    wrong cover is worse than the typographic one."""
+    q = f"{artist or ''} {title}".strip()
+    data = net.get_json(NETEASE_SEARCH, {"s": q, "type": 10, "limit": 8}, referer="https://music.163.com/")
+    for r in ((data or {}).get("result") or {}).get("albums") or []:
+        if fuzz.ratio(_norm(title), _norm(t2s(r.get("name") or ""))) < 85:
+            continue
+        name = t2s((r.get("artist") or {}).get("name") or "")
+        if artist and fuzz.partial_ratio(_norm(artist), _norm(name)) < 80:
+            continue
+        if r.get("picUrl"):
+            return r["picUrl"].replace("http://", "https://") + "?param=600y600"
     return None

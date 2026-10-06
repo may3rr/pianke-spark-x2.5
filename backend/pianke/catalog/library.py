@@ -18,7 +18,7 @@ from functools import lru_cache
 from rapidfuzz import fuzz
 
 from ..config import LIBRARY_DB
-from ..lookup import net, online
+from ..lookup import net, online, web
 from .vocab import ALBUM_REGIONS  # noqa: F401  (re-exported for schemas)
 
 _local = threading.local()
@@ -178,6 +178,8 @@ def resolve(domain: str, title: str, creator: str | None = None, year: int | Non
     found = (online.find_book if kind == "book" else online.find_album)(title, creator, year)
     if found is None and original and original != title:
         found = (online.find_book if kind == "book" else online.find_album)(original, creator, year)
+    if found is None:  # only when the user set a search key
+        found = web.find_work(kind, title, creator, year)
     return _shape(found) if found else None
 
 

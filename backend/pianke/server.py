@@ -29,7 +29,7 @@ from .flows import recommend as rec_flow
 from .llm import client as llm_client
 from .llm import settings as llm_settings
 from .llm.runtime import runtime
-from .lookup import covers
+from .lookup import covers, net, online, web
 from .memory import store
 
 TOKEN = os.environ.get("PIANKE_TOKEN")
@@ -40,6 +40,11 @@ async def lifespan(_: FastAPI):
     store.init()
     if os.environ.get("PIANKE_NO_MODELS") != "1":
         runtime.start_all()
+    if store.get_pref("onboarded", False) and os.environ.get("PIANKE_NO_PREFETCH") != "1":
+        # covers for the records and past picks, so the shelves open with art
+        ids = [i["id"] for i in store.items()]
+        ids += [p["id"] for r in store.recs(60) for p in r["picks"]]
+        interview_flow.warm_covers(list(dict.fromkeys(ids)))
     if not store.get_pref("onboarded", False) and os.environ.get("PIANKE_NO_PREFETCH") != "1":
         # first launch: the walls come ~30 s in; fetch their covers meanwhile,
         # one lane per shelf so books don't queue behind films
@@ -187,6 +192,35 @@ def put_llm(body: LlmIn) -> dict:
     s = llm_settings.save(body.model_dump())
     runtime.apply(s)
     return llm_settings.public(s)
+
+
+class ServicesIn(BaseModel):
+    tmdb_key: str | None = None  # None keeps the saved key
+    search_provider: str | None = None
+    exa_key: str | None = None
+    tavily_key: str | None = None
+
+
+@app.put("/services", dependencies=[Depends(auth)])
+def put_services(body: ServicesIn) -> dict:
+    before = llm_settings.load()["tmdb_key"]
+    s = llm_settings.save(body.model_dump())
+    if s["tmdb_key"] != before:
+        # posters that weren't found before may be on TMDB
+        with net.cache() as c:
+            c.execute("delete from covers where ok=0")
+    return llm_settings.public(s)
+
+
+@app.post("/services/test", dependencies=[Depends(auth)])
+def test_services() -> dict:
+    out = {}
+    if llm_settings.load()["tmdb_key"]:
+        out["tmdb"] = bool(online.tmdb_poster("tt0118694"))  # 花样年华
+    if web.enabled():
+        rows = web.search("花样年华 影评", n=2)
+        out["search"] = rows[0]["title"] if rows else ""
+    return out
 
 
 @app.post("/llm/test", dependencies=[Depends(auth)])

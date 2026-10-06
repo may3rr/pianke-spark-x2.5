@@ -119,6 +119,10 @@ export interface LlmSettings {
   ctx: number
   has_key: boolean
   key_hint: string
+  /** hints for the other saved keys, '' when unset */
+  keys: { tmdb_key: string; exa_key: string; tavily_key: string }
+  search_provider: '' | 'exa' | 'tavily'
+  search_on: boolean
   host: string
   /** false when the user's words go to a server off this Mac */
   on_device: boolean

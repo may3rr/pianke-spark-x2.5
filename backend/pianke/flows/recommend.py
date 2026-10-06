@@ -17,6 +17,11 @@ The same pipeline serves films, books and albums. What differs per shelf —
 the filters the model may ask for, how a seed is verified, the wording —
 sits in the small adapters at the bottom of this file. Books and albums are
 verified on the local shelf first and then online, by title only.
+
+With a web search key (lookup/web.py) two steps grow: direction also writes
+search queries, and what they find becomes more seeds (verified like the
+rest); after picking, each pick's reviews are searched and the reasons
+rewritten around a concrete detail from them.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from ..catalog import search as catalog
 from ..catalog.vocab import ALBUM_GENRE_NAMES, ALBUM_REGIONS, BOOK_GENRE_NAMES, BOOK_LANGS
 from ..domains import WORDS
 from ..llm import client
+from ..lookup import web
 from ..memory import store
 from . import memory_view
 
@@ -142,9 +148,9 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     yield _sse_step("direction", "running")
     d, st1 = client.chat(
         "big",
-        [{"role": "system", "content": DIRECTION_SYSTEM}, {"role": "user", "content": context}],
+        [{"role": "system", "content": DIRECTION_SYSTEM + _queries_hint()}, {"role": "user", "content": context}],
         task="rec_direction",
-        schema=DIRECTION_SCHEMA,
+        schema=_with_queries(DIRECTION_SCHEMA),
         max_tokens=900,
         sampling={"temperature": 0.7, "top_p": 0.95},
     )
@@ -153,9 +159,11 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
 
     # ------------------------------------------------------------- search
     yield _sse_step("search", "running")
+    web_seeds, web_note = _web_seeds("film", DIRECTION_SCHEMA, d, context)
+    seeds = d["seeds"] + web_seeds
     exclude = seen | store.recently_recommended()
     verified: list[dict] = []
-    for s in d["seeds"]:
+    for s in seeds:
         hit = catalog.resolve(s["title"], s["year"] or None, s["original"] or None)
         ok = hit is not None and hit["id"] not in exclude
         yield {
@@ -187,7 +195,7 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     pool = (verified + pool)[:36]
     yield _sse_step(
         "search", "done",
-        detail=f"模型想到 {len(d['seeds'])} 部，片库核实 {len(verified)} 部；按条件再找 {len(pool) - len(verified)} 部",
+        detail=f"模型想到 {len(d['seeds'])} 部{web_note}，片库核实 {len(verified)} 部；按条件再找 {len(pool) - len(verified)} 部",
         pool=len(pool),
     )
     if len(pool) < 3:
@@ -259,13 +267,19 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
         if t["id"] not in used:
             used.add(t["id"])
             picks.append(_present(t, {"reason": "", "because": []}, rel_titles))
+    reviewed = 0
+    if web.enabled():
+        yield _sse_step("pick", "running", detail="读网上的评价")
+        reviewed = _review_reasons(picks[0].get("domain") or "film", picks, context, d["direction"])
     stats = {
         "mode": mode,
         "seconds": round(time.time() - t_start, 1),
         "prompt_tokens": (st1.get("prompt_tokens") or 0) + (st2.get("prompt_tokens") or 0),
         "gen_tps": st2.get("gen_tps"),
         "pool": len(pool),
-        "seeds": len(d["seeds"]),
+        "seeds": len(seeds),
+        "web_seeds": len(web_seeds),
+        "reviews": reviewed,
         "verified": len(verified),
         "relaxed": relaxed,
     }
@@ -296,6 +310,109 @@ def _present(t: dict, p: dict, rel_titles: dict) -> dict:
             "rating": it["rating"],
         })
     return {**t, "reason": p.get("reason", "").strip().replace("您", "你"), "because": quotes}
+
+
+# ================================================================ web search
+
+def _queries_hint() -> str:
+    if not web.enabled():
+        return ""
+    return ("\n另外输出 queries：1 到 2 个联网搜索词，用来找符合这次要求、你不一定记得的作品，"
+            "尤其是最近几年的新作和冷门佳作，比如“2024 年 节奏慢 治愈 日本电影 推荐”。")
+
+
+def _with_queries(schema: dict) -> dict:
+    if not web.enabled():
+        return schema
+    return {
+        **schema,
+        "properties": {**schema["properties"],
+                       "queries": {"type": "array", "items": {"type": "string"}, "maxItems": 2}},
+        "required": [*schema["required"], "queries"],
+    }
+
+
+WEB_SEEDS = """你是「片刻」。下面是为这次推荐联网搜到的结果。从中找出符合方向、确实存在的{noun}，最多 6 {unit}。
+只写搜索结果里明确出现的{noun}，写清名字、原名和年份{creator}。用户已经{verb}过或不想{verb}的不要写。没有合适的就留空数组。"""
+
+
+def _web_seeds(domain: str, schema: dict, d: dict, context: str) -> tuple[list[dict], str]:
+    """Run the model's search queries and turn what they find into seeds."""
+    queries = [q for q in (d.get("queries") or []) if q.strip()][:2]
+    if not queries or not web.enabled():
+        return [], ""
+    results = [r for rs in web.search_many(queries) for r in rs]
+    if not results:
+        return [], "，联网没搜到"
+    w = WORDS[domain]
+    creator = {"book": "和作者", "music": "和歌手"}.get(domain, "")
+    try:
+        out = _web_seed_call(domain, schema, d, context, results, w, creator)
+    except Exception:  # noqa: BLE001 — the model's own seeds still go ahead
+        return [], ""
+    return out["seeds"], f"，联网搜到 {len(out['seeds'])} {w['unit']}"
+
+
+def _web_seed_call(domain, schema, d, context, results, w, creator) -> dict:
+    out, _ = client.chat(
+        "big",
+        [{"role": "system", "content": WEB_SEEDS.format(noun=w["noun"], unit=w["unit"], creator=creator,
+                                                        verb=w["verb"])},
+         {"role": "user", "content": f"{context}\n\n## 方向\n{d['direction']}\n\n"
+                                     f"## 联网搜索结果\n{web.block(results, limit=10)}"}],
+        task=f"rec_web_seeds_{domain}",
+        schema={"type": "object", "required": ["seeds"], "properties": {
+            "seeds": {"type": "array", "maxItems": 6, "items": schema["properties"]["seeds"]["items"]}}},
+        max_tokens=700,
+        sampling={"temperature": 0.4, "top_p": 0.95},
+    )
+    return out
+
+
+REVIEW_WORD = {"film": "影评", "book": "书评", "music": "乐评"}
+
+REVIEW_SYSTEM = """你是「片刻」。下面是已经为用户挑好的作品，每部附有原来的推荐理由和网上搜到的评价。
+重写每部的 reason：40 到 80 个字，用“你”称呼。从网上的评价里取一个具体的细节（常被提到的场面、写法、编曲、口碑），再把它和用户说过的话、喜欢的作品或这次的状态连起来。
+不剧透，不编造评价里没有的事实，不要写“网上说”“有评论认为”这类话。几条的开头和句式要不一样。没搜到评价的，保留原来的理由。"""
+
+
+def _review_reasons(domain: str, picks: list[dict], context: str, direction: str) -> int:
+    """Search each pick's reviews and rewrite its reason around them; returns
+    how many picks had any. Reasons stay as they were if this fails."""
+    def query(p: dict) -> str:
+        by = (p.get("directors") or p.get("creators") or [""])[0]
+        return f"{p['name']} {p.get('year') or ''} {by} {REVIEW_WORD.get(domain, '评价')}"
+
+    found = web.search_many([query(p) for p in picks], n=4)
+    n = sum(1 for rs in found if rs)
+    if not n:
+        return 0
+    blocks = "\n\n".join(
+        f"### {p['name']}（id {p['id']}）\n原来的理由：{p['reason'] or '（无）'}\n"
+        f"网上的评价：\n{web.block(rs, limit=4, chars=250) or '（没搜到）'}"
+        for p, rs in zip(picks, found)
+    )
+    ids = [p["id"] for p in picks]
+    try:
+        out, _ = client.chat(
+            "big",
+            [{"role": "system", "content": REVIEW_SYSTEM},
+             {"role": "user", "content": f"{context}\n\n## 方向\n{direction}\n\n## 挑好的作品\n{blocks}"}],
+            task=f"rec_reviews_{domain}",
+            schema={"type": "object", "required": ["reasons"], "properties": {"reasons": {
+                "type": "array", "minItems": len(ids), "maxItems": len(ids),
+                "items": {"type": "object", "required": ["id", "reason"], "properties": {
+                    "id": {"type": "string", "enum": ids}, "reason": {"type": "string"}}}}}},
+            max_tokens=900,
+            sampling={"temperature": 0.6, "top_p": 0.95},
+        )
+    except Exception:  # noqa: BLE001 — the first reasons are still good
+        return 0
+    by_id = {r["id"]: r["reason"].strip().replace("您", "你") for r in out["reasons"] if r["reason"].strip()}
+    for p in picks:
+        if p["id"] in by_id:
+            p["reason"] = by_id[p["id"]]
+    return n
 
 
 # ================================================================ books, albums
@@ -403,9 +520,10 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
     yield _sse_step("direction", "running")
     d, st1 = client.chat(
         "big",
-        [{"role": "system", "content": SHELF_DIRECTION[domain]}, {"role": "user", "content": context}],
+        [{"role": "system", "content": SHELF_DIRECTION[domain] + _queries_hint()},
+         {"role": "user", "content": context}],
         task=f"rec_direction_{domain}",
-        schema=_shelf_direction_schema(domain),
+        schema=_with_queries(_shelf_direction_schema(domain)),
         max_tokens=1100,
         sampling={"temperature": 0.7, "top_p": 0.95},
     )
@@ -421,7 +539,8 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         return library.resolve(domain, s["title"], s.get(creator_key) or None, s["year"] or None,
                                s["original"] or None)
 
-    seeds = d["seeds"][:10]
+    web_seeds, web_note = _web_seeds(domain, _shelf_direction_schema(domain), d, context)
+    seeds = d["seeds"][:10] + web_seeds
     with ThreadPoolExecutor(4) as ex:
         hits = list(ex.map(verify, seeds))
     verified: list[dict] = []
@@ -456,7 +575,7 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
     pool = (verified + pool)[:32]
     yield _sse_step(
         "search", "done",
-        detail=f"模型想到 {len(seeds)} {w['unit']}，核实 {len(verified)} {w['unit']}；按条件再找 {len(pool) - len(verified)} {w['unit']}",
+        detail=f"模型想到 {len(d['seeds'][:10])} {w['unit']}{web_note}，核实 {len(verified)} {w['unit']}；按条件再找 {len(pool) - len(verified)} {w['unit']}",
         pool=len(pool),
     )
     if len(pool) < 3:
@@ -524,6 +643,10 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         if t["id"] not in used:
             used.add(t["id"])
             picks.append(_present(t, {"reason": "", "because": []}, rel_titles))
+    reviewed = 0
+    if web.enabled():
+        yield _sse_step("pick", "running", detail="读网上的评价")
+        reviewed = _review_reasons(picks[0].get("domain") or "film", picks, context, d["direction"])
     stats = {
         "mode": mode,
         "seconds": round(time.time() - t_start, 1),
@@ -531,6 +654,8 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         "gen_tps": st2.get("gen_tps"),
         "pool": len(pool),
         "seeds": len(seeds),
+        "web_seeds": len(web_seeds),
+        "reviews": reviewed,
         "verified": len(verified),
         "relaxed": relaxed,
     }

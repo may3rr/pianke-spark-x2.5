@@ -111,7 +111,16 @@ PIANKE_PYTHON=$(which python) npm run dev
 
 内存不够或不想下载模型时，在「设置 → 模型」里切到「OpenAI 兼容接口」，填接口地址（一般以 `/v1` 结尾）、API Key 和模型名。OpenAI、DeepSeek、OpenRouter 和本机的 Ollama、LM Studio 都可以用，这时第 1 步的模型和 llama.cpp 都不需要。不同服务支持的参数不一样，片刻会根据接口返回的 400 错误自动去掉或改名不支持的参数，结构化输出从 `json_schema` 依次退到 `json_object` 和纯提示词。
 
-设置存在 `~/Library/Application Support/Pianke/llm.json`（权限 600），不在记忆文件里，清空记忆和导出都不会带上 API Key。用远程接口时，你的话、记录和口味画像会在聊天和推荐时发给那个服务，界面上的隐私说明会随之改变；接口在本机（localhost）时仍然算作不出这台 Mac。
+设置存在 `~/Library/Application Support/Pianke/settings.json`（权限 600），不在记忆文件里，清空记忆和导出都不会带上 API Key。用远程接口时，你的话、记录和口味画像会在聊天和推荐时发给那个服务，界面上的隐私说明会随之改变；接口在本机（localhost）时仍然算作不出这台 Mac。
+
+### 联网服务（可选）
+
+「设置 → 联网服务」里可以填：
+
+- **TMDB API Key**：电影海报按 IMDb 编号直接从 TMDB 取，一次请求，比按片名搜豆瓣快得多。在 themoviedb.org 免费申请，v3 Key 和 v4 Read Access Token 都可以。没填时仍用豆瓣和维基百科。
+- **Exa 或 Tavily**：填了搜索 Key 后，推荐会多做三件事：定方向时模型写一两个搜索词，从结果里找新作和冷门作品，再和其他候选一样核实；书库、豆瓣、iTunes 都查不到的书和专辑，用搜索核实是否存在；挑好之后搜每一部的评价，把推荐理由改写得更具体。每次推荐多 3 到 5 次搜索和两次模型调用。
+
+专辑封面先查网易云音乐（不需要 Key，约 0.2 秒一张），再查维基百科、Cover Art Archive 和 iTunes。启动时会在后台把你的记录和最近推荐过的作品的封面先取下来。
 
 用户数据只存在 `~/Library/Application Support/Pianke/user.sqlite`。同目录下的 `cache.sqlite` 和 `covers/` 只放公开的作品信息和封面，可以随时删除。
 
@@ -164,7 +173,7 @@ PIANKE_HOME=/tmp/pianke-demo PIANKE_DRIVE=scripts/drive/shelves.json PIANKE_SHOT
 backend/pianke/
   llm/        llama-server 进程管理（用时加载）、OpenAI 兼容接口、带 JSON 约束的调用、每次调用的耗时记录
   catalog/    片库（IMDb）、书库和曲库（Wikidata）：核实、条件检索、封面墙
-  lookup/     唯一联网的地方：按作品名查书、专辑和封面，结果缓存在本机
+  lookup/     唯一联网的地方：按作品名查书、专辑和封面，联网搜索（web.py），结果缓存在本机
   memory/     L0–L2 的 SQLite 存储
   domains.py  三个书架的措辞、回访周期、“没看”的原因和它们写到哪里
   flows/      冷启动、推荐、看过 / 没看、回访、画像整理

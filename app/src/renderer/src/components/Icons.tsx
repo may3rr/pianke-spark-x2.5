@@ -57,12 +57,15 @@ export function SparklesFillIcon(p: IconProps) {
 }
 
 export function GearFillIcon(p: IconProps) {
+  // six teeth around (12, 12); the thin stroke rounds the tooth corners
   return (
     <Fill {...p}>
       <path
         fillRule="evenodd"
-        d="M10.3 2h3.4l.5 2.6c.6.2 1.1.5 1.6.9l2.5-.9 1.7 3-2 1.7a6.6 6.6 0 0 1 0 1.8l2 1.7-1.7 3-2.5-.9c-.5.4-1 .7-1.6.9l-.5 2.6h-3.4l-.5-2.6a6.8 6.8 0 0 1-1.6-.9l-2.5.9-1.7-3 2-1.7a6.6 6.6 0 0 1 0-1.8l-2-1.7 1.7-3 2.5.9c.5-.4 1-.7 1.6-.9zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"
-        transform="translate(0 0.5)"
+        stroke={p.color ?? 'currentColor'}
+        strokeWidth={0.9}
+        strokeLinejoin="round"
+        d="M9.62 4.47L10.14 1.97L13.86 1.97L14.38 4.47A7.9 7.9 0 0 1 17.34 6.18L19.76 5.38L21.61 8.60L19.71 10.29A7.9 7.9 0 0 1 19.71 13.71L21.61 15.40L19.76 18.62L17.34 17.82A7.9 7.9 0 0 1 14.38 19.53L13.86 22.03L10.14 22.03L9.62 19.53A7.9 7.9 0 0 1 6.66 17.82L4.24 18.62L2.39 15.40L4.29 13.71A7.9 7.9 0 0 1 4.29 10.29L2.39 8.60L4.24 5.38L6.66 6.18A7.9 7.9 0 0 1 9.62 4.47ZM12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 1 0 0-7.2z"
       />
     </Fill>
   )

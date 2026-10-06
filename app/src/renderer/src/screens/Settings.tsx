@@ -96,6 +96,9 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
           </>
         )}
 
+        <h2 className="section-h">联网服务</h2>
+        <OnlineServices llm={status.llm} onSaved={onReset} />
+
         <h2 className="section-h">片库、书库和曲库</h2>
         <div className="set-card">
           <div className="set-row">
@@ -138,9 +141,10 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
           <div className="set-row">
             <Tile color="var(--tile-teal)" icon={<WifiSlashFillIcon size={13} />} />
             <div className="set-main">
-              <div style={{ fontWeight: 500 }}>联网只查作品，不带你的信息</div>
+              <div style={{ fontWeight: 500 }}>{status.llm.search_on ? '联网查作品，也联网搜索' : '联网只查作品，不带你的信息'}</div>
               <div className="t13 secondary">
-                片刻会按作品名去豆瓣、iTunes、Open Library 查封面，核实书名和专辑名。请求里只有作品名、作者或年份，没有你的话、评分和画像，也没有账号。
+                片刻会按作品名去 TMDB、豆瓣、网易云音乐、iTunes、Open Library 查封面，核实书名和专辑名，请求里只有作品名、作者或年份。
+                {status.llm.search_on && '开了联网搜索后，模型根据你这次的要求写出的搜索词会发给搜索服务。'}
               </div>
             </div>
           </div>
@@ -324,7 +328,7 @@ function ModelSource({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }
               spellCheck={false}
               autoComplete="off"
             />
-            <div className="field-hint">只存在本机的 llm.json 里，清空记忆和导出都不会带上它。</div>
+            <div className="field-hint">只存在本机的 settings.json 里，清空记忆和导出都不会带上它。</div>
           </label>
           <label className="field">
             <span className="field-label">主模型</span>
@@ -370,6 +374,103 @@ function ModelSource({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }
           {r.ok ? `${r.model} 可以用，${r.seconds} 秒回答了「${r.answer}」。` : `${r.model}：${r.error}`}
         </div>
       ))}
+    </div>
+  )
+}
+
+/** TMDB for film posters, Exa or Tavily for web search. Keys are write-only. */
+function OnlineServices({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }) {
+  const [tmdb, setTmdb] = useState('')
+  const [provider, setProvider] = useState(llm.search_provider)
+  const [searchKey, setSearchKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const keyName = provider === 'exa' ? 'exa_key' : 'tavily_key'
+  const savedHint = provider ? llm.keys[keyName] : ''
+  const dirty = tmdb !== '' || searchKey !== '' || provider !== llm.search_provider
+
+  const saveAndTest = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      if (dirty) {
+        await put('/services', {
+          tmdb_key: tmdb === '' ? null : tmdb,
+          search_provider: provider,
+          ...(provider && searchKey !== '' ? { [keyName]: searchKey } : {}),
+        })
+        setTmdb('')
+        setSearchKey('')
+        onSaved()
+      }
+      const r = await post<{ tmdb?: boolean; search?: string }>('/services/test')
+      const parts = []
+      if (r.tmdb !== undefined) parts.push(r.tmdb ? 'TMDB 可以用' : 'TMDB 没查到海报，检查 Key')
+      if (r.search !== undefined) parts.push(r.search ? `搜索可以用，搜到「${r.search}」` : '搜索没有结果，检查 Key')
+      setNote(parts.join('；') || '已保存')
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="set-card" style={{ padding: '12px 16px' }}>
+      <label className="field" style={{ marginTop: 0 }}>
+        <span className="field-label">TMDB API Key（电影海报）</span>
+        <input
+          className="field-input"
+          type="password"
+          value={tmdb}
+          onChange={(e) => setTmdb(e.target.value)}
+          placeholder={llm.keys.tmdb_key ? `已保存（${llm.keys.tmdb_key}），留空则不改` : 'v3 API Key 或 v4 Read Access Token'}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <div className="field-hint">
+          按 IMDb 编号直接取海报，一次请求，比按片名搜豆瓣快得多。在 themoviedb.org 的账户设置里免费申请。没填时用豆瓣和维基百科。
+        </div>
+      </label>
+      <div className="field">
+        <span className="field-label">联网搜索</span>
+        <div className="seg">
+          {(
+            [
+              ['', '不用'],
+              ['exa', 'Exa'],
+              ['tavily', 'Tavily'],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} className={provider === k ? 'on' : ''} onClick={() => setProvider(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {provider && (
+        <label className="field">
+          <span className="field-label">{provider === 'exa' ? 'Exa' : 'Tavily'} API Key</span>
+          <input
+            className="field-input"
+            type="password"
+            value={searchKey}
+            onChange={(e) => setSearchKey(e.target.value)}
+            placeholder={savedHint ? `已保存（${savedHint}），留空则不改` : provider === 'exa' ? 'Exa API Key' : 'tvly-...'}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+      )}
+      <div className="field-hint" style={{ marginTop: 8 }}>
+        开了以后推荐会多做三件事：定方向时联网找新作和冷门作品；书库和网上都查不到的书、专辑，用搜索核实是否存在；挑好之后搜它们的评价，把理由写得更具体。每次推荐多 3 到 5 次搜索和两次模型调用。
+      </div>
+      <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+        <button className="pill-sm" disabled={busy || (!dirty && !llm.keys.tmdb_key && !llm.search_on)} onClick={saveAndTest}>
+          {busy ? '正在测试' : dirty ? '保存并测试' : '测试'}
+        </button>
+        {note && <span className="t13 secondary">{note}</span>}
+      </div>
     </div>
   )
 }
