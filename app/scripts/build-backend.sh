@@ -11,11 +11,16 @@ PY="${PIANKE_PYTHON:-python3}"
 "$PY" -c 'import sys; assert sys.version_info >= (3, 11), "needs Python 3.11+"'
 
 [ -x .venv/bin/python ] || "$PY" -m venv .venv
-.venv/bin/pip install -q --upgrade pip
-# dependencies only; PyInstaller reads pianke from this folder (--paths),
-# it can't follow an editable install
-.venv/bin/pip install -q . pyinstaller
-.venv/bin/pip uninstall -q -y pianke
+# reinstall only when the dependencies change: it needs the network, and a
+# flaky proxy shouldn't fail a build that has everything already
+DEPS=$(shasum -a 256 pyproject.toml | cut -c1-16)
+if [ "$(cat .venv/.deps 2>/dev/null)" != "$DEPS" ]; then
+  .venv/bin/pip install -q --upgrade pip
+  # dependencies only: pianke ships as source (see scripts/pianke_backend.py)
+  .venv/bin/pip install -q . pyinstaller
+  .venv/bin/pip uninstall -q -y pianke
+  echo "$DEPS" > .venv/.deps
+fi
 
 # pianke is not frozen in (it ships as source, see scripts/pianke_backend.py),
 # so every module it imports is passed as a hidden import
