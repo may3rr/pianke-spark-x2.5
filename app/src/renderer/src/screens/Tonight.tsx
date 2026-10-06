@@ -19,6 +19,7 @@ import {
 } from '../components/Icons'
 import CheckinCard from '../components/CheckinCard'
 import Cover from '../components/Cover'
+import CopyButton from '../components/CopyButton'
 import LogPanel from '../components/LogPanel'
 import PassPanel from '../components/PassPanel'
 import { models } from '../lib/models'
@@ -374,6 +375,7 @@ function Result({
               : `由 ${models().host} 上的 ${models().big} 挑选，用时 ${r.stats.seconds} 秒。`}
           </span>
           <span className="flex" style={{ gap: 8 }}>
+            <CopyButton label={`拷贝这三${c.unit}`} text={picksText(r.picks)} />
             <button className="pill-sm" onClick={newNight}>
               换个说法
             </button>
@@ -453,7 +455,10 @@ function PickBlock({
           <div className="pick-num">
             第 {i + 1} {c.unit}
           </div>
-          <h2 className="pick-name film-name">{p.name}</h2>
+          <div className="pick-name-row">
+            <h2 className="pick-name film-name">{p.name}</h2>
+            <CopyButton text={p.name} title={`拷贝${c.noun}名`} />
+          </div>
           <div className="pick-orig secondary">
             {p.original && p.original !== p.name ? `${p.original}，` : ''}
             {p.year}
@@ -540,4 +545,16 @@ function PickBlock({
       )}
     </section>
   )
+}
+
+/** The three picks as plain text: names to search on a streaming site or a
+ *  bookshop, with the reasons to send to a friend. */
+function picksText(picks: Pick[]): string {
+  return picks
+    .map((p, i) => {
+      const by = (p.directors ?? p.creators ?? [])[0]
+      const meta = [p.year, by].filter(Boolean).join('，')
+      return `${i + 1}. 《${p.name}》${meta ? `（${meta}）` : ''}${p.reason ? `\n${p.reason}` : ''}`
+    })
+    .join('\n\n')
 }

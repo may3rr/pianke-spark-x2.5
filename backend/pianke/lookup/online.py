@@ -111,11 +111,49 @@ def _book_from_itunes(r: dict) -> dict:
     }
 
 
+DOUBAN_AUTHOR_BOOKS = "https://book.douban.com/author/{id}/books"
+
+
+def douban_author_books(author_id: str, name: str, pages: int = 3, lane: str = "bg") -> list[dict]:
+    """An author's books from their Douban page, most-collected first (10 a
+    page). Douban's suggest box answers an author's name with the author,
+    not the books, so this is how 伊坂幸太郎 finds more than two."""
+    out = []
+    for page in range(pages):
+        html = net.get_text(DOUBAN_AUTHOR_BOOKS.format(id=author_id),
+                            {"sortby": "collect", "format": "pic", "start": page * 10},
+                            referer="https://book.douban.com/", lane=lane)
+        items = re.findall(r"<li>\s*<dl>(.*?)</dl>\s*</li>", html or "", re.S)
+        for blk in items:
+            sid = re.search(r"subject/(\d+)/", blk)
+            title = re.search(r"<h6>\s*<a [^>]*>([^<]+)</a>", blk)
+            if not sid or not title:
+                continue
+            year = re.search(r"<span>\((\d{4})\)</span>", blk)
+            img = re.search(r'<img src="([^"]+)"', blk)
+            votes = re.search(r"(\d+)人评价", blk)
+            b = _book_from_douban({"id": sid.group(1), "title": title.group(1).strip(), "author_name": name,
+                                   "year": year.group(1) if year else None, "pic": img.group(1) if img else ""})
+            b["popularity"] = int(votes.group(1)) if votes else 0
+            out.append(b)
+        if len(items) < 10:
+            break
+    return out
+
+
 def search_books(q: str, limit: int = 8, lane: str = "bg") -> list[dict]:
     """Douban first (Chinese editions); when it has nothing — or is
-    throttling us — iTunes Books."""
-    rows = [r for r in douban("book", q, lane) if r.get("type") == "b" and r.get("id")]
+    throttling us — iTunes Books. A query that is an author's name brings
+    that author's books."""
+    found = douban("book", q, lane)
+    rows = [r for r in found if r.get("type") == "b" and r.get("id")]
     cands = [_book_from_douban(r) for r in rows]
+    for a in found:
+        name = re.sub(r"^\s*[\[［(（【][^\]］)）】]*[\]］)）】]\s*", "", a.get("title") or "")
+        if a.get("type") == "a" and a.get("id") and fuzz.ratio(_norm(q), _norm(name)) >= 90:
+            cands += douban_author_books(a["id"], a.get("title") or name, lane=lane)
+            limit = max(limit, 30)
+            break
     if not cands:
         # iTunes matches loosely; keep books whose title carries a word of the query
         words = [w for w in _norm(q).split() if len(w) >= 2] or [_norm(q)]

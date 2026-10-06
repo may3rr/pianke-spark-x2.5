@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { spawn, ChildProcess, execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import net from 'node:net'
@@ -112,6 +112,10 @@ ipcMain.handle('pianke:open-external', (_e, url: string) => {
 
 ipcMain.handle('pianke:reveal', (_e, p: string) => {
   shell.showItemInFolder(p)
+})
+
+ipcMain.handle('pianke:copy', (_e, text: string) => {
+  if (typeof text === 'string') clipboard.writeText(text)
 })
 
 ipcMain.handle('pianke:update-state', () => updateState())
@@ -515,6 +519,22 @@ async function createWindow() {
   if (DRIVE) {
     win.webContents.on('console-message', (_e, _l, msg) => console.log(`[renderer] ${msg}`))
   }
+  // Electron has no right-click menu of its own: copy on a selection, the
+  // usual edit commands in a text box
+  win.webContents.on('context-menu', (_e, p) => {
+    const items: Electron.MenuItemConstructorOptions[] = p.isEditable
+      ? [
+          { role: 'cut', label: '剪切', enabled: p.editFlags.canCut },
+          { role: 'copy', label: '拷贝', enabled: p.editFlags.canCopy },
+          { role: 'paste', label: '粘贴', enabled: p.editFlags.canPaste },
+          { type: 'separator' },
+          { role: 'selectAll', label: '全选' },
+        ]
+      : p.selectionText.trim()
+        ? [{ role: 'copy', label: '拷贝' }]
+        : []
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win! })
+  })
   win.on('focus', () => win?.webContents.send('pianke:focus', true))
   // a recording keeps the focused look even when another app is in front
   if (!REC_DIR) win.on('blur', () => win?.webContents.send('pianke:focus', false))

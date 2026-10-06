@@ -155,6 +155,31 @@ def get_json(url: str, params: dict[str, Any], *, referer: str | None = None,
     return data
 
 
+def get_text(url: str, params: dict[str, Any], *, referer: str | None = None,
+             ttl: float = 7 * 86400, lane: str = "bg") -> str | None:
+    """GET a public HTML page, cached like get_json. None on any failure."""
+    key = "text:" + url + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
+    with cache() as c:
+        r = c.execute("select body, ts from http where key=?", (key,)).fetchone()
+    if r and time.time() - r["ts"] < ttl:
+        return r["body"]
+    if _is_down(url):
+        _fails.n = failures() + 1
+        return r["body"] if r else None
+    try:
+        with _polite(url, lane):
+            resp = _http().get(url, params=params, headers={"Referer": referer} if referer else None)
+        resp.raise_for_status()
+        body = resp.text
+    except Exception as e:  # noqa: BLE001 — offline or blocked: callers fall back
+        _mark(url, e)
+        _fails.n = failures() + 1
+        return r["body"] if r else None
+    with cache() as c:
+        c.execute("insert or replace into http values(?,?,?)", (key, body, time.time()))
+    return body
+
+
 def get_bytes(url: str, *, referer: str | None = None) -> bytes | None:
     if _is_down(url):
         _fails.n = failures() + 1

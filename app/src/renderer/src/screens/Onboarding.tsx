@@ -421,7 +421,7 @@ export function Interview({
               }}
               data-ob-input
             />
-            <button className="pill-sm dim" disabled={busy} onClick={() => send('这题跳过')}>
+            <button className="pill-sm dim chat-skip" disabled={busy} onClick={() => send('这题跳过')}>
               跳过
             </button>
             <button className="pill-accent" style={{ height: 44, padding: '0 18px' }} disabled={busy || !text.trim()} onClick={() => send()} data-ob-send>

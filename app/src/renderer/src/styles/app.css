@@ -1609,3 +1609,48 @@ label.field {
   background: var(--accent);
   flex: none;
 }
+
+/* text boxes grow with what's typed, up to a limit, then scroll */
+.chat-input,
+.compose-input,
+.fb-input,
+.claim-edit {
+  field-sizing: content;
+  overflow-y: auto;
+}
+.compose-input,
+.fb-input {
+  max-height: 320px;
+}
+.chat-input {
+  max-height: 200px;
+}
+/* 跳过 sits beside the 44px input and 发送 at the same height */
+.chat-skip {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  flex: none;
+}
+
+/* a recommended title and its copy button */
+.pick-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.copy-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex: none;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+.copy-btn:hover {
+  background: var(--fill);
+  color: var(--text);
+}

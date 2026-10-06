@@ -46,10 +46,20 @@ address {
   font-style: normal;
 }
 
-/* the paper is selectable; chrome is not */
+/* content is selectable — titles, reasons, the chat, records, the profile —
+   so it can be copied; controls are not, so clicking around (or
+   double-clicking a cover on the wall) never paints a selection */
 .paper,
-.paper * {
+.paper *,
+.main-area,
+.main-area *,
+.msg-bot,
+.msg-me {
   user-select: text;
+}
+:is(.main-area, .paper) :is(button, [role='button'], [role='switch'], label, .seg, .chip-row, .wall-stage, .tile, .drag-strip, .top-strip),
+:is(.main-area, .paper) :is(button, [role='button'], [role='switch'], label, .seg, .chip-row, .wall-stage, .tile) * {
+  user-select: none;
 }
 
 /* visible keyboard focus — the only allowed outline */

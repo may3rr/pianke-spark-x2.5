@@ -267,3 +267,13 @@ export function ChevronLeftIcon({ size = 12 }: IconProps) {
     </svg>
   )
 }
+
+/** doc.on.doc: copy */
+export function CopyIcon({ size = 14, color = 'currentColor' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" aria-hidden style={{ flex: 'none', display: 'block' }}>
+      <rect x="8.5" y="8.5" width="12" height="12.5" rx="2.6" />
+      <path d="M15.5 8.5V5.6A2.6 2.6 0 0 0 12.9 3H6.1A2.6 2.6 0 0 0 3.5 5.6v7.8A2.6 2.6 0 0 0 6.1 16h2.4" />
+    </svg>
+  )
+}

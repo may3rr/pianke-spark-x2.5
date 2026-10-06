@@ -17,6 +17,8 @@ export interface PiankeApi {
   getInfo(): Promise<{ baseUrl: string; token: string; backendError: string | null }>
   openExternal(url: string): void
   reveal(path: string): void
+  /** the renderer is sandboxed; the main process writes the clipboard */
+  copy(text: string): Promise<void>
   onMenu(cb: (cmd: MenuCmd) => void): () => void
   onFocus(cb: (focused: boolean) => void): () => void
   onBackendError(cb: (msg: string) => void): () => void
@@ -38,6 +40,7 @@ const api: PiankeApi = {
   getInfo: () => ipcRenderer.invoke('pianke:info'),
   openExternal: (url) => ipcRenderer.invoke('pianke:open-external', url),
   reveal: (p) => ipcRenderer.invoke('pianke:reveal', p),
+  copy: (t) => ipcRenderer.invoke('pianke:copy', t),
   onMenu: (cb) => {
     const h = (_e: unknown, cmd: MenuCmd) => cb(cmd)
     ipcRenderer.on('pianke:menu', h)
