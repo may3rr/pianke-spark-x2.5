@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "shots": "node scripts/shots.mjs",
-    "dist": "./scripts/build-backend.sh && electron-vite build && electron-builder --mac --arm64 && ./scripts/make-dmg.sh"
+    "dist": "./scripts/build-backend.sh && electron-vite build && electron-builder --mac --arm64 && node scripts/stamp-components.mjs && ./scripts/make-dmg.sh",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -50,6 +51,13 @@
       {
         "from": "build/backend/pianke-backend",
         "to": "backend"
+      },
+      {
+        "from": "../backend/pianke",
+        "to": "backend-src/pianke",
+        "filter": [
+          "**/*.py"
+        ]
       },
       {
         "from": "../data",

@@ -2,6 +2,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 export type MenuCmd = 'settings' | 'tonight' | 'want' | 'watched' | 'profile' | 'film' | 'book' | 'music'
 
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'full' | 'error'
+  current: string
+  version?: string
+  notes?: string
+  parts?: string[]
+  size?: number
+  received?: number
+  error?: string
+}
+
 export interface PiankeApi {
   getInfo(): Promise<{ baseUrl: string; token: string; backendError: string | null }>
   openExternal(url: string): void
@@ -11,6 +22,16 @@ export interface PiankeApi {
   onBackendError(cb: (msg: string) => void): () => void
   /** true while the UI driver runs: skip long intro animations */
   driven: boolean
+  update: {
+    state(): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    download(): Promise<UpdateState>
+    /** quits and reopens the app with the update in place */
+    apply(): Promise<void>
+    /** release page, for updates that need the full dmg */
+    openPage(): Promise<void>
+    onState(cb: (s: UpdateState) => void): () => void
+  }
 }
 
 const api: PiankeApi = {
@@ -33,6 +54,18 @@ const api: PiankeApi = {
     return () => ipcRenderer.off('pianke:backend-error', h)
   },
   driven: !!process.env.PIANKE_DRIVE && process.env.PIANKE_DRIVE_FAST === '1',
+  update: {
+    state: () => ipcRenderer.invoke('pianke:update-state'),
+    check: () => ipcRenderer.invoke('pianke:update-check'),
+    download: () => ipcRenderer.invoke('pianke:update-download'),
+    apply: () => ipcRenderer.invoke('pianke:update-apply'),
+    openPage: () => ipcRenderer.invoke('pianke:update-page'),
+    onState: (cb) => {
+      const h = (_e: unknown, s: UpdateState) => cb(s)
+      ipcRenderer.on('pianke:update', h)
+      return () => ipcRenderer.off('pianke:update', h)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('pianke', api)

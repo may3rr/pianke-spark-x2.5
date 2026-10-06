@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import net from 'node:net'
 import path from 'node:path'
 import fs from 'node:fs'
+import { applyUpdate, checkForUpdate, downloadUpdate, openReleasePage, startUpdateChecks, updateState } from './updater'
 
 // dev: a Python 3.11+ with the backend's dependencies and the repo's backend/.
 // installed: the frozen backend and the catalogs in the bundle's Resources
@@ -61,6 +62,8 @@ async function startBackend(): Promise<void> {
         PIANKE_TOKEN: TOKEN,
         PIANKE_HOME,
         PIANKE_DATA: path.join(res, 'data'),
+        // our Python code, as source beside the frozen runtime (updates swap it alone)
+        PIANKE_SRC: path.join(res, 'backend-src'),
         PIANKE_MODELS: process.env.PIANKE_MODELS || path.join(PIANKE_HOME, 'models'),
       },
     })
@@ -110,6 +113,12 @@ ipcMain.handle('pianke:open-external', (_e, url: string) => {
 ipcMain.handle('pianke:reveal', (_e, p: string) => {
   shell.showItemInFolder(p)
 })
+
+ipcMain.handle('pianke:update-state', () => updateState())
+ipcMain.handle('pianke:update-check', () => checkForUpdate())
+ipcMain.handle('pianke:update-download', () => downloadUpdate())
+ipcMain.handle('pianke:update-apply', () => applyUpdate(killBackend))
+ipcMain.handle('pianke:update-page', () => openReleasePage())
 
 // ---------------------------------------------------------------- driver
 
@@ -527,6 +536,7 @@ app.whenReady().then(async () => {
   buildMenu()
   await startBackend()
   await createWindow()
+  if (!DRIVE || process.env.PIANKE_UPDATE_URL) startUpdateChecks()
 })
 
 app.on('window-all-closed', () => app.quit())

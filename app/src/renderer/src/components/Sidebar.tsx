@@ -4,6 +4,7 @@ import { DOMAINS, DOMAIN_ORDER } from '../lib/domains'
 import { reltime } from '../lib/format'
 import { BookFillIcon, GearFillIcon, MoonFillIcon, MusicNoteFillIcon, SparklesFillIcon } from './Icons'
 import { modelDot, modelStatusLabel, shortName } from '../lib/models'
+import { hasUpdate, useUpdate } from '../lib/update'
 
 export type View = Domain | 'profile' | 'settings'
 
@@ -28,6 +29,7 @@ export default function Sidebar({
   openRec: (r: PastRec) => void
   activeRec: number | null
 }) {
+  const update = useUpdate()
   return (
     <aside className="glass-sidebar">
       <div className="drag-strip" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52 }} />
@@ -118,6 +120,7 @@ export default function Sidebar({
               <GearFillIcon size={17} />
             </span>
             <span>设置</span>
+            {hasUpdate(update) && <span className="update-dot" title={`有新版本 ${update.version}`} data-update-dot />}
           </button>
         </div>
       </div>

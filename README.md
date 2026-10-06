@@ -134,6 +134,31 @@ PIANKE_PYTHON=$(which python3.11) npm run dist
 
 安装包约 400 MB，包含界面、后端、片库和书库，不含模型。用本机模式时，把两个 gguf 放进 `~/Library/Application Support/Pianke/models/`，或者在那里建一个指向已有模型目录的链接；用 OpenAI 兼容接口时不需要模型。后端日志在同目录的 `backend.log`。应用没有签名，只在打包的这台 Mac 上直接打开；拷到别的 Mac 上要右键选「打开」。
 
+### 发布更新
+
+装好的片刻启动后和之后每 6 小时读一次 GitHub Releases 上最新的 `latest.json`。有新版本时，侧栏「设置」旁边亮一个蓝点，设置页顶部可以下载。应用分四部分，各有一个指纹，只下载指纹变了的部分：
+
+| 部分 | 内容 | 压缩后 |
+| --- | --- | --- |
+| app | 界面和主进程（app.asar） | 约 1.3 MB |
+| backend-src | 后端的 Python 源码 | 约 0.06 MB |
+| runtime | 冻结的 Python 和第三方库 | 约 19 MB，只在依赖变了时下载 |
+| data | 片库和书库 | 约 24 MB，只在重建片库后下载 |
+
+下载完点「重启并更新」，片刻退出，一个小脚本把这几部分换进 `片刻.app`，再重新打开。Electron 版本变了的更新要下载完整 dmg。没有用 electron-updater：它在 Mac 上要求应用签名。
+
+发一个新版本：
+
+```bash
+cd app
+# 1. 把 package.json 的 version 改大，比如 0.1.0 → 0.1.1
+PIANKE_PYTHON=$(which python3.11) npm run dist            # 2. 打包
+npm run release -- --notes "这次改了什么"                    # 3. 生成 release/update/，先看一眼
+npm run release -- --notes "这次改了什么" --publish          # 4. 上传到 GitHub Releases
+```
+
+runtime 的指纹由 Python 版本、`pip freeze` 和后端用到的模块列表算出，不看文件本身（PyInstaller 每次打包的字节都不一样）。打包时会在冻结的环境里把后端每个模块导入一遍，缺库会在这一步报错。
+
 图标的源文件是 `app/scripts/icon.svg`，改了之后运行 `npx electron scripts/make-icon.mjs` 重新生成 `build/icon.icns`。
 
 用户数据只存在 `~/Library/Application Support/Pianke/user.sqlite`。同目录下的 `cache.sqlite` 和 `covers/` 只放公开的作品信息和封面，可以随时删除。

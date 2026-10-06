@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { get, post, put, type LlmSettings, type Status } from '../lib/api'
 import { modelDot, modelStatusLabel } from '../lib/models'
+import { hasUpdate, mb, useUpdate } from '../lib/update'
 import { BooksFillIcon, CpuFillIcon, GearFillIcon, LockFillIcon, Tile, WifiSlashFillIcon } from '../components/Icons'
 
 interface Usage {
@@ -33,6 +34,7 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
           <Tile color="var(--tile-grey)" size={56} icon={<GearFillIcon size={30} />} />
         </span>
         <h1 className="page-title">设置</h1>
+        <UpdateCard />
 
         <h2 className="section-h">模型</h2>
         <ModelSource llm={status.llm} onSaved={onReset} />
@@ -48,7 +50,7 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                     {m.key === 'big' ? '定方向、挑片、整理口味画像' : '把你说的话整理成记录'}
                     {m.provider === 'api'
                       ? `。经 ${m.host} 调用`
-                      : `。${m.file}，${gb(m.size_bytes)}，上下文 ${(m.ctx / 1024).toFixed(0)}K，用到时才加载`}
+                      : `。${[m.file, gb(m.size_bytes), `上下文 ${(m.ctx / 1024).toFixed(0)}K`, '用到时才加载'].filter(Boolean).join('，')}`}
                   </div>
                   {u && (
                     <div className="t13 secondary">
@@ -208,9 +210,7 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
             )}
           </div>
         </div>
-        <div className="t13 secondary" style={{ margin: '48px 0 0', textAlign: 'center' }}>
-          片刻 0.1，Spark-X2.5 端侧模型创新挑战赛参赛作品
-        </div>
+        <VersionFooter />
       </div>
     </>
   )
@@ -471,6 +471,77 @@ function OnlineServices({ llm, onSaved }: { llm: LlmSettings; onSaved: () => voi
         </button>
         {note && <span className="t13 secondary">{note}</span>}
       </div>
+    </div>
+  )
+}
+
+/** Shown at the top of Settings while there is an update to act on. */
+function UpdateCard() {
+  const u = useUpdate()
+  if (!hasUpdate(u) && u.status !== 'error') return null
+  if (u.status === 'error' && !u.version) return null
+  return (
+    <div className="set-card update-card" style={{ padding: '12px 16px', marginBottom: 8 }}>
+      <div className="flex items-center" style={{ gap: 12 }}>
+        <span className="update-dot" style={{ marginLeft: 0 }} />
+        <div className="set-main">
+          <div style={{ fontWeight: 500 }}>
+            {u.status === 'ready' ? `${u.version} 已下载好` : `有新版本 ${u.version}`}
+            <span className="secondary" style={{ fontWeight: 400 }}>{`，当前 ${u.current}`}</span>
+          </div>
+          <div className="t13 secondary">
+            {u.status === 'available' && `只需下载有变化的部分，共 ${mb(u.size)}。`}
+            {u.status === 'downloading' && `正在下载 ${mb(u.received)} / ${mb(u.size)}`}
+            {u.status === 'ready' && '重启片刻就会换上新版本，你的记录不受影响。'}
+            {u.status === 'full' && '这个版本换了底层运行环境，需要下载完整安装包。'}
+            {u.status === 'error' && u.error}
+          </div>
+          {u.notes && u.status !== 'downloading' && (
+            <div className="t13" style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{u.notes}</div>
+          )}
+        </div>
+        {u.status === 'available' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.download()} data-update-download>
+            下载更新
+          </button>
+        )}
+        {u.status === 'ready' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.apply()} data-update-apply>
+            重启并更新
+          </button>
+        )}
+        {u.status === 'full' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.openPage()}>
+            去下载
+          </button>
+        )}
+        {u.status === 'error' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.check()}>
+            重试
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function VersionFooter() {
+  const u = useUpdate()
+  const note =
+    u.status === 'checking' ? '正在检查更新' : u.status === 'none' ? '已是最新版本' : u.status === 'error' ? '检查更新失败' : ''
+  return (
+    <div className="t13 secondary" style={{ margin: '48px 0 0', textAlign: 'center' }}>
+      片刻 {u.current}，Spark-X2.5 端侧模型创新挑战赛参赛作品
+      {u.current && (
+        <>
+          {' · '}
+          {note || (
+            <button className="link-accent t13" onClick={() => window.pianke.update.check()}>
+              检查更新
+            </button>
+          )}
+        </>
+      )}
     </div>
   )
 }
