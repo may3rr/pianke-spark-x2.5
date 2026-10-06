@@ -1,0 +1,106 @@
+:root {
+  /* Notion warm neutrals */
+  --bg: #ffffff;
+  --bg-subtle: #f7f7f5;      /* 区块分隔只靠这一层底色 */
+  --text: #37352f;
+  --text-secondary: rgba(55, 53, 47, 0.65);  /* 次要信息：计数、说明、组标签 */
+  --accent: #2383e2;         /* 唯一的交互强调色：主按钮、选中态、链接 */
+
+  --fill: rgba(55, 53, 47, 0.06);          /* hover / 普通选中 */
+  --fill-strong: rgba(55, 53, 47, 0.09);   /* 按下列表行、低严重度底色 */
+  --sidebar-tint: rgba(247, 247, 245, 0.55);  /* 侧栏可选叠色，透出 vibrancy */
+  --glass-edge: 0 0 0 0.5px rgba(55, 53, 47, 0.09);
+  --glass-shadow: 0 8px 24px rgba(55, 53, 47, 0.10);
+  --separator: rgba(0, 0, 0, 0.1);   /* 侧栏/检查器与阅读区之间唯一的线 */
+
+  /* 语义色（图形用）：macOS 系统色 / 红绿灯配色——圆点、tile、图标、
+     进度条、勾选、spinner。太鲜艳不能当文本色，文本用 --*-text */
+  --high: #ff5f57;           /* 严重问题 */
+  --high-tint: rgba(255, 95, 87, 0.2);
+  --medium: #febc2e;         /* 需注意 */
+  --medium-tint: rgba(254, 188, 46, 0.22);
+  --ok: #28c840;             /* 已核验 / 修订 */
+  --ok-tint: rgba(40, 200, 64, 0.18);
+  --low: var(--text-secondary);          /* 低严重度（中性） */
+  --low-tint: var(--fill-strong);
+  /* 语义文本色（判定词、彩色计数）：深一档保证白底 ≥4.5:1 */
+  --high-text: #d70015;
+  --medium-text: #a05a00;
+  --ok-text: #1e7e34;
+
+  /* 图标色块（图层 tile；非语义色相——语义色只表达状态，不当图层色。
+     白字上图标，不需要文本对比度） */
+  --tile-indigo: #5856d6;    /* 文献真实性 */
+  --tile-blue: #007aff;      /* 论断支持度 */
+  --tile-teal: #30b0c7;      /* 引用分布 */
+  --tile-purple: #af52de;    /* 格式规范 */
+  --tile-grey: #8e8e93;      /* 全部问题 */
+  /* 期刊评审的智能体色。取偏品红的粉，而不是 macOS 的 #ff2d55：
+     后者与语义红 --high 只差十几度，会被读成「严重问题」 */
+  --tile-pink: #d6409f;      /* 期刊评审 */
+  --on-tile: #ffffff;        /* 色块与智能体小球上的眼睛 / 白色 glyph */
+
+  /* 品牌色：设置页供应商图标（LobeHub lobe-icons 品牌色） */
+  --brand-qwen: #6336e7;
+  --brand-deepseek: #4d6bfe;
+  --on-brand: #ffffff;       /* 品牌色块上的白色 glyph */
+
+  /* 骨架页细边 / 占位微光 / SVG 页边描线（唯一允许线条的几处数据图形） */
+  --hairline: var(--separator);
+  --shimmer: rgba(255, 255, 255, 0.45);
+
+  /* 致谢彩蛋：全屏片尾，深浅色下都是黑底白字的「游戏片尾」 */
+  --egg-bg: #000000;
+  --egg-ink: #ffffff;
+  --egg-dim: rgba(255, 255, 255, 0.55);
+  --egg-moon: #f4ecc2;            /* 片尾的像素满月 */
+  --egg-moon-shade: #d9cf9c;
+  --egg-moon-glow: #f4ecc2;
+  --egg-clover: #34c759;          /* 关于页像素四叶草 */
+  --egg-clover-shine: #b8f5c6;
+
+  /* 缓动：一次定义，全站共用 */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #191919;
+    --bg-subtle: #202020;
+    --text: rgba(255, 255, 255, 0.87);
+    --text-secondary: rgba(255, 255, 255, 0.48);
+    --accent: #529cca;
+
+    --fill: rgba(255, 255, 255, 0.055);
+    --fill-strong: rgba(255, 255, 255, 0.09);
+    --sidebar-tint: rgba(32, 32, 32, 0.5);
+    --glass-edge: 0 0 0 0.5px rgba(255, 255, 255, 0.10);
+    --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --separator: rgba(255, 255, 255, 0.1);
+
+    --high: #ff6961;
+    --high-tint: rgba(255, 105, 97, 0.28);
+    --medium: #ffc53d;
+    --medium-tint: rgba(255, 197, 61, 0.28);
+    --ok: #32d74b;
+    --ok-tint: rgba(50, 215, 75, 0.28);
+    --high-text: #ff6961;
+    --medium-text: #ffc53d;
+    --ok-text: #32d74b;
+
+    /* dark 下色块提亮（macOS dark system colors） */
+    --tile-indigo: #5e5ce6;
+    --tile-blue: #0a84ff;
+    --tile-teal: #40cbe0;
+    --tile-purple: #bf5af2;
+    --tile-grey: #98989d;
+    --tile-pink: #e55aaa;
+    --on-tile: #ffffff;
+
+    /* 品牌色在 dark 下保持原色，白字不变 */
+    --brand-qwen: #6336e7;
+    --brand-deepseek: #4d6bfe;
+    --on-brand: #ffffff;
+
+    --shimmer: rgba(255, 255, 255, 0.12);
+  }
+}

@@ -1,0 +1,1424 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global base rules — AGENTS §6. Color values live in tokens.css only. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* transparent root: window vibrancy shows through the flush sidebar pane;
+   every other region paints its own background */
+html,
+body {
+  background: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    'PingFang SC', system-ui, sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  /* counts, costs and progress don't jitter as they change */
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* no italics anywhere — including any UA-styled semantics */
+*,
+*::before,
+*::after {
+  font-style: normal !important;
+  font-synthesis: none;
+}
+em,
+i,
+cite,
+dfn,
+var,
+address {
+  font-style: normal;
+}
+
+/* the paper is selectable; chrome is not */
+.paper,
+.paper * {
+  user-select: text;
+}
+
+/* visible keyboard focus — the only allowed outline */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  cursor: default;
+  font: inherit;
+  color: inherit;
+  background: none;
+  padding: 0;
+}
+
+select {
+  font: inherit;
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* no orphan line ends in running text / callouts */
+.paper p,
+.callout {
+  text-wrap: pretty;
+}
+
+/* 17px / 1.7 reading surface */
+.paper {
+  font-size: 17px;
+  line-height: 1.7;
+}
+.paper-refs {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* type scale helpers */
+.t13 {
+  font-size: 13px;
+}
+.t20 {
+  font-size: 20px;
+}
+.t26 {
+  font-size: 26px;
+}
+.t32 {
+  font-size: 32px;
+}
+.secondary {
+  color: var(--text-secondary);
+}
+
+/* draggable toolbar strip */
+.drag-strip {
+  -webkit-app-region: drag;
+}
+/* solid strip material (backdrop-filter was unreliable over the paper) */
+.bar-solid {
+  background: var(--bg);
+}
+.bar-solid-subtle {
+  background: var(--bg-subtle);
+}
+/* macOS behavior: a 1px separator hairline fades in under the strip only
+   while the pane below is scrolled */
+.strip-edge {
+  position: relative;
+}
+.strip-edge::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  box-shadow: 0 1px 0 var(--separator);
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+  pointer-events: none;
+}
+.strip-edge.scrolled::after {
+  opacity: 1;
+}
+.drag-strip button,
+.drag-strip a,
+.drag-strip select,
+.drag-strip [role='button'] {
+  -webkit-app-region: no-drag;
+}
+
+/* capsule controls */
+.pill {
+  background: var(--fill);
+  border-radius: 980px;
+  padding: 8px 24px;
+  font-weight: 500;
+}
+.pill-accent {
+  background: var(--accent);
+  color: white;
+  border-radius: 980px;
+  height: 30px;
+  padding: 0 14px;
+  font-weight: 500;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-quiet {
+  background: var(--fill);
+  border-radius: 980px;
+  padding: 4px 16px;
+}
+
+/* small native-style indeterminate spinner — accent arc drawn as SVG */
+.spinner {
+  animation: cc-spin 0.8s linear infinite;
+}
+@keyframes cc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* home sidebar history rows */
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 160ms var(--ease);
+}
+.hist-row:hover {
+  background: var(--fill);
+}
+.hist-row.sel {
+  background: var(--fill-strong);
+}
+.hist-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.hist-row-name {
+  display: block;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hist-row-sub {
+  display: block;
+}
+.hist-row-del {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition:
+    opacity 160ms var(--ease),
+    color 160ms var(--ease);
+}
+.hist-row:hover .hist-row-del,
+.hist-row-del.confirming {
+  opacity: 1;
+}
+.hist-row-del.confirming {
+  color: var(--high-text);
+  font-weight: 500;
+}
+
+/* flush left pane — native vibrancy shows through; the 1px separator is
+   the only line besides the focus ring */
+.glass-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  /* above the reading area's view-transition stacking context, so the
+     separator hairline isn't overpainted by its opaque background */
+  z-index: 1;
+  background: var(--sidebar-tint);
+  box-shadow: 1px 0 0 var(--separator);
+  overflow: hidden;
+}
+
+/* flush right pane — --bg-subtle reads better against the hairline and
+   keeps the inset-grouped card look */
+.inspector {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  z-index: 1;
+  background: var(--bg-subtle);
+  box-shadow: -1px 0 0 var(--separator);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* white cards inside the inspector (Settings inset-grouped look) */
+.card {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+}
+/* the settings pane itself is --bg, so its cards flip to the subtle fill */
+.settings-col .card {
+  background: var(--bg-subtle);
+}
+
+/* sidebar rows */
+.side-row {
+  height: 32px;
+  border-radius: 8px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+.side-row:hover {
+  background: var(--fill);
+}
+.side-row.sel {
+  background: var(--fill-strong);
+}
+
+/* inspector list rows — selected is a white card on grey */
+.list-row {
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+  text-align: left;
+}
+.list-row:hover {
+  background: var(--fill);
+}
+.list-row.sel {
+  background: var(--fill-strong);
+}
+
+/* group labels (13px secondary) */
+.group-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+}
+
+/* highlight tints — padded inline marks, clone across line breaks */
+.hl {
+  border-radius: 4px;
+  padding: 0 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.hl-high {
+  background: var(--high-tint);
+}
+.hl-medium {
+  background: var(--medium-tint);
+}
+.hl-low {
+  background: var(--low-tint);
+}
+.hl-rev {
+  background: var(--ok-tint);
+}
+/* neighbouring segments join into one continuous mark */
+.hl-jl {
+  padding-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.hl-jr {
+  padding-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.hl {
+  transition: background-color 240ms var(--ease);
+}
+/* while one item is selected the other marks step back */
+.has-sel .hl-high {
+  background: color-mix(in srgb, var(--high) 9%, transparent);
+}
+.has-sel .hl-medium {
+  background: color-mix(in srgb, var(--medium) 10%, transparent);
+}
+.has-sel .hl-low {
+  background: color-mix(in srgb, var(--text-secondary) 7%, transparent);
+}
+.has-sel .hl-rev {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+/* selected segment: stronger version of the same semantic color */
+.hl-sel-high {
+  background: color-mix(in srgb, var(--high) 38%, transparent);
+}
+.hl-sel-medium {
+  background: color-mix(in srgb, var(--medium) 45%, transparent);
+}
+.hl-sel-low {
+  background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+}
+.hl-sel-rev {
+  background: color-mix(in srgb, var(--ok) 36%, transparent);
+}
+/* text scrolling under the toolbar fades out instead of being cut —
+   only once scrolled, so the page icon at the top is never faded */
+.paper.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px);
+  mask-image: linear-gradient(to bottom, transparent 0, black 16px);
+}
+
+/* detail slide/fade — ends fully opaque */
+@keyframes cc-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.detail-in {
+  opacity: 1;
+  animation: cc-detail-in 240ms var(--ease);
+}
+
+/* 2-line clamp for list rows */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* severity dots */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot-high {
+  background: var(--high);
+}
+.dot-medium {
+  background: var(--medium);
+}
+.dot-low {
+  background: var(--low);
+}
+.dot-rev {
+  background: var(--ok);
+}
+
+.link-accent {
+  color: var(--accent);
+}
+
+/* semantic text — the readable variants, never the vivid graphic colors */
+.sem-high {
+  color: var(--high-text);
+}
+.sem-medium {
+  color: var(--medium-text);
+}
+.sem-ok {
+  color: var(--ok-text);
+}
+
+/* ============================================================ tiles */
+/* colored rounded-square layer icon (macOS Settings / Notion look) */
+.tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex: none;
+}
+
+/* transparent sidebar glyph (20px box, same footprint the tiles had):
+   neutral glyphs are secondary text and go full --text on the selected row;
+   layer glyphs keep their hue (.side-ic-hue, colour set inline) */
+.side-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--text-secondary);
+  transition: color 160ms var(--ease);
+}
+.side-row.sel .side-ic:not(.side-ic-hue),
+.hist-row.sel .side-ic:not(.side-ic-hue) {
+  color: var(--text);
+}
+
+/* ======================================================== skeleton */
+/* page thumbnails on the running screen — paper sheets on a --bg-subtle
+   rounded backdrop */
+.sk-row {
+  display: flex;
+  gap: 12px;
+  background: var(--bg-subtle);
+  border-radius: 12px;
+  padding: 12px;
+}
+.sk-page {
+  width: 124px;
+  height: 170px;
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow:
+    var(--glass-edge), /* page edge — the one allowed ring */
+    var(--glass-shadow); /* soft lift so pages read as paper */
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+@keyframes cc-sk-pop {
+  50% {
+    transform: scale(1.02);
+  }
+}
+.sk-page.sk-pop {
+  animation: cc-sk-pop 300ms var(--ease);
+}
+@keyframes cc-bar-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.sk-bar {
+  position: relative;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--fill-strong);
+  transform-origin: left;
+  animation: cc-bar-in 240ms var(--ease) both;
+  flex: none;
+}
+.sk-bar.short {
+  width: 58%;
+}
+.sk-bar.ref {
+  width: 72%;
+}
+.sk-head {
+  height: 11px;
+  display: flex;
+  align-items: center;
+  flex: none;
+  animation: cc-bar-in 240ms var(--ease) both;
+}
+.sk-head-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1;
+  transform: scale(0.72);
+  transform-origin: left;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100px;
+  text-overflow: ellipsis;
+}
+/* layer anchors light the bar in the vivid severity color (~0.85 —
+   these are graphics, not highlights behind text) */
+.sk-sev-high {
+  background: color-mix(in srgb, var(--high) 85%, transparent);
+}
+.sk-sev-medium {
+  background: color-mix(in srgb, var(--medium) 85%, transparent);
+}
+.sk-sev-low {
+  background: color-mix(in srgb, var(--text-secondary) 85%, transparent);
+}
+/* citation markers: accent dots on the bars */
+.sk-dot {
+  position: absolute;
+  top: -0.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+@keyframes cc-dot-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+.sk-dot.sk-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: cc-dot-pulse 400ms var(--ease);
+}
+/* AFFiNE-style shimmer wave over the pre-parse placeholder */
+.sk-shimmer .sk-bar {
+  animation: none;
+  opacity: 0.6;
+}
+.sk-shimmer {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+.sk-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--shimmer),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: cc-shimmer 1.6s linear infinite;
+}
+@keyframes cc-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ======================================================= illustrations */
+.papers {
+  animation: cc-float 6s ease-in-out infinite;
+}
+@keyframes cc-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.papers .sheet {
+  transition: transform 200ms var(--ease);
+  transform-origin: 50% 80%;
+}
+.papers.fan .sheet-b {
+  transform: rotate(-4deg);
+}
+.papers.fan .sheet-c {
+  transform: rotate(4deg);
+}
+.papers.fan .sheet-a {
+  transform: scale(1.04);
+}
+.sheet-edge {
+  stroke: var(--hairline);
+  stroke-width: 0.5;
+}
+
+/* ============================================================ motion */
+/* buttons press at 0.97 */
+.pill-accent,
+.pill,
+.pill-quiet {
+  transition: transform 160ms var(--ease);
+}
+.pill-accent:active,
+.pill:active,
+.pill-quiet:active {
+  transform: scale(0.97);
+}
+/* row hover fades --fill in over 120ms */
+.list-row,
+.side-row {
+  transition: background 120ms var(--ease);
+}
+
+/* checkmark draw (stroke-dashoffset, 240ms) */
+.check-draw {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: cc-draw 240ms var(--ease) forwards;
+}
+@keyframes cc-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* report entrance: blocks rise 8px + fade; list rows stagger */
+@keyframes cc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: cc-rise 240ms var(--ease) both;
+}
+.row-in {
+  animation: cc-rise 160ms var(--ease) both;
+}
+@keyframes cc-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* highlights fade in after the rows */
+.hl {
+  animation: cc-fade 240ms var(--ease) 260ms both;
+}
+
+/* support excerpt: measured-height expand + content crossfade (240ms) */
+.excerpt-clip {
+  overflow: hidden;
+  transition: height 240ms var(--ease);
+}
+.excerpt-swap {
+  animation: cc-fade 240ms var(--ease) both;
+}
+
+/* properties block (Notion page header) */
+.prop-row {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 6px;
+  padding: 0 8px;
+  margin: 0 -8px;
+}
+.prop-row:hover {
+  background: var(--fill);
+}
+.prop-label {
+  width: 96px;
+  flex: none;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.prop-value {
+  font-size: 15px;
+}
+
+/* summary callout (Notion callout) */
+.callout {
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* view transitions: soft crossfade, 360ms */
+::view-transition-group(*) {
+  animation-duration: 360ms;
+}
+.detail-title {
+  view-transition-name: cc-detail-title;
+}
+.row-title-sel {
+  view-transition-name: cc-detail-title;
+}
+
+/* ======================================================== settings */
+
+.settings-col {
+  width: 100%;
+  /* forms read best at a measured width, like macOS System Settings */
+  max-width: 720px;
+  padding: 24px 48px 48px;
+  margin: 0 auto;
+}
+.settings-h {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* labelled input rows inside grouped cards */
+.field {
+  margin-top: 12px;
+}
+.field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.field-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.field-input {
+  display: block;
+  width: 100%;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--fill);
+  padding: 0 12px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+/* round avatar — image, or the name's first character on a tile hue */
+.avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 500;
+  object-fit: cover;
+  flex: none;
+}
+
+/* bottom-left account row — on Empty it floats over the corner, in the
+   report sidebar it is the last row */
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  width: 100%;
+  text-align: left;
+  transition: background 120ms var(--ease);
+}
+.account-chip:hover {
+  background: var(--fill);
+}
+.account-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* account section: centered identity + activity heatmap */
+.account-hello {
+  font-weight: 600;
+  margin: 0;
+  text-align: center;
+}
+.account-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 0 24px;
+}
+.avatar-btn {
+  border-radius: 50%;
+  transition:
+    transform 160ms var(--ease),
+    opacity 160ms var(--ease);
+}
+.avatar-btn:hover {
+  opacity: 0.85;
+}
+.avatar-btn:active {
+  transform: scale(0.96);
+}
+.account-name-input {
+  background: transparent;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  width: 320px;
+  max-width: 100%;
+}
+.account-name-input::placeholder {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.avatar-remove {
+  transition: color 160ms var(--ease);
+}
+.avatar-remove:hover {
+  color: var(--text);
+}
+.account-activity {
+  margin-top: 8px;
+}
+.act-months {
+  display: grid;
+  grid-template-rows: 16px;
+  grid-auto-flow: column;
+  grid-auto-columns: 12px;
+  gap: 4px;
+  justify-content: center;
+}
+.act-month {
+  white-space: nowrap;
+  overflow: visible;
+  line-height: 16px;
+}
+.act-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-flow: column;
+  grid-auto-columns: 12px;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.act-cell {
+  border-radius: 4px;
+  background: var(--fill);
+}
+.act-summary {
+  margin-top: 12px;
+  text-align: center;
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transition: transform 160ms var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.swatch:active {
+  transform: scale(0.92);
+}
+
+/* Word-style comment preview in 批注署名 */
+.cmt-preview {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.cmt-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--tile-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.cmt-author {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cmt-time {
+  margin-left: 8px;
+}
+.cmt-body {
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+/* provider picker (model settings) */
+.prov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.prov-sub {
+  margin: 12px 0 4px;
+}
+.prov-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 120ms var(--ease);
+}
+.prov-card:hover {
+  background: var(--fill);
+}
+.prov-card.sel {
+  background: var(--fill-strong);
+}
+.prov-card-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prov-add {
+  color: var(--text-secondary);
+}
+.provider-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.prov-card .provider-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+.prov-addform {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+.prov-addform .field:first-child {
+  margin-top: 0;
+}
+.prov-addform .field-input {
+  background: var(--bg);
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 4px;
+}
+.icopt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+  border-radius: 8px;
+  transition: background 120ms var(--ease);
+}
+.icopt:hover {
+  background: var(--bg-subtle);
+}
+.icopt.sel {
+  background: var(--fill-strong);
+}
+.model-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  column-gap: 12px;
+}
+.pill-s {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* usage hero + bars + daily chart */
+.usage-hero-num {
+  font-weight: 700;
+}
+.usage-stats {
+  display: flex;
+  gap: 48px;
+  margin-top: 16px;
+}
+.usage-stat-num {
+  font-weight: 600;
+}
+.usage-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.usage-bar {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--fill);
+  overflow: hidden;
+  margin: 4px 0 2px;
+}
+.usage-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tile-purple);
+}
+.usage-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  padding-top: 8px;
+}
+.usage-col {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.usage-col-bar {
+  width: 100%;
+  max-width: 24px;
+  border-radius: 4px 4px 0 0;
+  background: var(--tile-purple);
+}
+.usage-col-label {
+  white-space: nowrap;
+}
+
+/* usage tables */
+.usage-card {
+  padding: 8px 16px;
+}
+.usage-doc + .usage-doc {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+.usage-sub {
+  padding-left: 12px;
+}
+.usage-sub .t13:first-child {
+  color: var(--text-secondary);
+}
+.usage-name {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ============================================================ about */
+.about-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 0 24px;
+}
+.about-blurb {
+  max-width: 480px;
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+}
+
+/* the paper keeps proportional figures — it is prose, not UI */
+.paper {
+  font-variant-numeric: normal;
+}
+
+/* middle truncation: head ellipsizes, tail stays */
+.hist-row-name.mid-trunc {
+  display: flex;
+  min-width: 0;
+}
+.mid-trunc-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mid-trunc-tail {
+  flex: none;
+  white-space: pre;
+}
+
+/* scroll-to pulse on the picked passage */
+@keyframes cc-flash {
+  0%, 100% { opacity: 1; }
+  25%, 75% { opacity: 0.45; }
+}
+.hl-flash {
+  animation: cc-flash 800ms var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hl-flash {
+    animation: none;
+  }
+}
+
+/* window in the background: selection goes neutral-quiet, hued glyphs desaturate */
+:root[data-window-focus='false'] .side-row.sel,
+:root[data-window-focus='false'] .list-row.sel,
+:root[data-window-focus='false'] .hist-row.sel {
+  background: var(--fill);
+}
+:root[data-window-focus='false'] .glass-sidebar .tile,
+:root[data-window-focus='false'] .glass-sidebar .side-ic-hue {
+  filter: saturate(0.3);
+  opacity: 0.8;
+}
+
+/* ======================================================= onboarding */
+.onboard-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 64px 24px 72px;
+  animation: cc-stage-in 480ms var(--ease) both;
+}
+.onboard-stage.leaving {
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 480ms var(--ease), transform 480ms var(--ease);
+}
+@keyframes cc-stage-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.onboard-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.onboard-hero {
+  font-weight: 700;
+  margin: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 800ms var(--ease), transform 800ms var(--ease);
+}
+.onboard-rise {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 480ms var(--ease) 480ms, transform 480ms var(--ease) 480ms;
+}
+.onboard-intro.on .onboard-hero,
+.onboard-intro.on .onboard-rise {
+  opacity: 1;
+  transform: none;
+}
+.onboard-intro.on .pill-accent.onboard-rise {
+  transition-delay: 800ms;
+}
+.onboard-panel {
+  max-width: 100%;
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+}
+.onboard-h {
+  font-weight: 600;
+  margin: 0;
+}
+.onboard-sub {
+  margin: 8px 0 16px;
+}
+.onboard-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+.onboard-lock {
+  display: flex;
+  justify-content: center;
+  /* room for the dot ring that closes around the lock */
+  padding: 40px 0;
+  margin-bottom: 8px;
+}
+.onboard-avatar-anchor .account-hero {
+  /* clear room for the dot ring orbiting the avatar */
+  gap: 32px;
+  padding-top: 48px;
+}
+.onboard-model .settings-actions {
+  margin-top: 24px;
+}
+.onboard-nav .pill,
+.onboard-model .settings-actions .pill {
+  height: 30px;
+  padding: 0 14px;
+}
+.onboard-privacy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.onboard-consent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.onboard-consent input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.link-quiet {
+  color: var(--text-secondary);
+  transition: opacity 160ms var(--ease);
+}
+.link-quiet:hover {
+  opacity: 0.75;
+}
+.pill-accent:disabled {
+  opacity: 0.4;
+}
+.onboard-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.onboard-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fill-strong);
+  transition: transform 240ms var(--ease), opacity 240ms var(--ease);
+}
+.onboard-dots span.on {
+  background: var(--text);
+  transform: scale(1.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboard-stage { animation: none; }
+  .onboard-hero, .onboard-rise { transition: none; }
+}
+
+/* ===================================================== credits egg */
+.credits {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--egg-bg);
+  animation: cc-stage-in 480ms var(--ease) both;
+}
+.credits-cv {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+.credits-hint {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  color: var(--egg-dim);
+}
+
+/* intro title: one line, old-style serif once settled */
+.onboard-shuffle {
+  /* display size for the intro title only; see lint-design exception */
+  --display-size: 56px;
+  font-size: var(--display-size);
+  line-height: 1.25;
+  transition: opacity 480ms var(--ease);
+}
+.shuffle-ch {
+  display: inline-block;
+  text-align: center;
+}
+
+/* about: game-style credits button */
+.about-egg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 32px;
+}
+.egg-btn {
+  padding: 8px;
+  border-radius: 12px;
+  /* sprite idle: a two-frame hop, like a title-screen mascot */
+  animation: egg-hop 1.6s steps(1) infinite;
+  transition: transform 160ms var(--ease);
+}
+.egg-btn:hover {
+  animation-play-state: paused;
+  transform: scale(1.12) rotate(-8deg);
+}
+.egg-btn:active {
+  transform: scale(0.94);
+}
+@keyframes egg-hop {
+  0%, 70% { transform: translateY(0); }
+  75%, 90% { transform: translateY(-4px); }
+}
+.egg-blink {
+  color: var(--text-secondary);
+  animation: egg-blink 1.2s steps(1) infinite;
+}
+@keyframes egg-blink {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .egg-btn, .egg-blink { animation: none; }
+}

@@ -1,0 +1,6 @@
+[
+  {"wait": "[data-compose]", "timeout": 60000},
+  {"wait": "[data-checkin]", "timeout": 20000},
+  {"sleep": 2500},
+  {"shot": "40-checkin"}
+]

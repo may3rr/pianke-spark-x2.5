@@ -1,0 +1,63 @@
+{
+  "titles": {
+    "Spark-X2.5-4B": {
+      "resolved": 38,
+      "total": 48,
+      "rate": 0.792,
+      "unresolved_examples": [
+        "《棒棒》 / Bàngbàng / 2018",
+        "《推拿》 / Tūnqī / 2014",
+        "跛豪 / Bolo / 1991",
+        "英雄本色(II) / Heroes II / 1992",
+        "天若有情 / If God Thinks / 1990",
+        "爱在日落之前 / Before Valentine's / 2010",
+        "心动时刻 / The Heart Wants What It Wants / 2005",
+        "疾速追杀（第一季） / John Wick: Chapter 1 - The Season / 2014"
+      ]
+    },
+    "Spark-X2.5-1.7B": {
+      "resolved": 9,
+      "total": 48,
+      "rate": 0.188,
+      "unresolved_examples": [
+        "春日花开 / 春日花开 / 2022",
+        "雪之国 / 雪の国 / 2021",
+        "海边的图书馆 / 海辺の図書館 / 2023",
+        "孤独的风景 / 孤独の風景 / 2022",
+        "月光之下 / 月明の下 / 2020",
+        "慢时光里 / 慢時光の中 / 2021",
+        "时空悖论 / The Paradox / 2021",
+        "虚境裂变 / The Frenzy / 2023"
+      ]
+    }
+  },
+  "ids": {
+    "free": {
+      "invalid": 0,
+      "total": 24,
+      "invalid_rate": 0.0
+    },
+    "enum": {
+      "invalid": 0,
+      "total": 24,
+      "invalid_rate": 0.0
+    }
+  },
+  "feedback": {
+    "Spark-X2.5-1.7B": {
+      "status_acc": 0.833,
+      "rating_within_1": 0.833,
+      "quote_verbatim": 1.0,
+      "avg_seconds": 0.92,
+      "n": 12
+    },
+    "Spark-X2.5-4B": {
+      "status_acc": 0.917,
+      "rating_within_1": 1.0,
+      "quote_verbatim": 1.0,
+      "avg_seconds": 1.84,
+      "n": 12
+    }
+  },
+  "measured_at": "2026-10-05 11:49"
+}

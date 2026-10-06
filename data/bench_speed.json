@@ -1,0 +1,53 @@
+{
+  "model": "Spark-X2.5-4B Q4_K_M",
+  "machine": "Apple M3 Pro，18GB 内存",
+  "runtime": "llama.cpp (Metal), flash attention",
+  "measured_at": "2026-10-05 11:39",
+  "rows": [
+    {
+      "ctx": 4051,
+      "records": 53,
+      "prompt_tps": 457.3,
+      "first_seconds": 9.84,
+      "cached_seconds": 0.32,
+      "cached_tokens": 4074,
+      "gen_tps": 27.8
+    },
+    {
+      "ctx": 16242,
+      "records": 215,
+      "prompt_tps": 400.9,
+      "first_seconds": 41.42,
+      "cached_seconds": 0.93,
+      "cached_tokens": 16265,
+      "gen_tps": 34.0
+    },
+    {
+      "ctx": 32554,
+      "records": 431,
+      "prompt_tps": 340.3,
+      "first_seconds": 97.09,
+      "cached_seconds": 0.7,
+      "cached_tokens": 32577,
+      "gen_tps": 23.3
+    },
+    {
+      "ctx": 65239,
+      "records": 863,
+      "prompt_tps": 252.5,
+      "first_seconds": 260.71,
+      "cached_seconds": 2.15,
+      "cached_tokens": 65262,
+      "gen_tps": 13.3
+    },
+    {
+      "ctx": 122446,
+      "records": 1618,
+      "prompt_tps": 169.6,
+      "first_seconds": 726.3,
+      "cached_seconds": 1.38,
+      "cached_tokens": 122469,
+      "gen_tps": 7.6
+    }
+  ]
+}

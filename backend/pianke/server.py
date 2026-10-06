@@ -1,0 +1,439 @@
+"""Local HTTP service for the desktop app. Binds 127.0.0.1 only; every
+request but /health carries the per-launch token the Electron main process
+generated."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from typing import Any, Callable, Iterator
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
+
+from .catalog import library
+from .catalog import search as catalog
+from .config import BIG, USER_DB
+from .domains import DOMAINS, PASS_REASONS, WORDS, reason_label
+from .flows import feedback as feedback_flow
+from .flows import interview as interview_flow
+from .flows import profile as profile_flow
+from .flows import recommend as rec_flow
+from .llm.runtime import runtime
+from .lookup import covers
+from .memory import store
+
+TOKEN = os.environ.get("PIANKE_TOKEN")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    store.init()
+    if os.environ.get("PIANKE_NO_MODELS") != "1":
+        runtime.start_all()
+    if not store.get_pref("onboarded", False) and os.environ.get("PIANKE_NO_PREFETCH") != "1":
+        # first launch: the walls come ~30 s in; fetch their covers meanwhile,
+        # one lane per shelf so books don't queue behind films
+        for d in ("film", "book", "music"):
+            interview_flow.warm_covers([t["id"] for t in interview_flow.wall_pool(d)])
+    yield
+    if os.environ.get("PIANKE_KEEP_MODELS") != "1":
+        runtime.stop_all()
+
+
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def auth(x_pianke_token: str | None = Header(default=None)) -> None:
+    if TOKEN and x_pianke_token != TOKEN:
+        raise HTTPException(401, "bad token")
+
+
+def auth_q(t: str | None = Query(default=None)) -> None:
+    """<img> can't send headers; covers take the token as ?t=."""
+    if TOKEN and t != TOKEN:
+        raise HTTPException(401, "bad token")
+
+
+def sse(gen_fn: Callable[[], Iterator[dict]]) -> EventSourceResponse:
+    """Run a blocking generator in a thread and stream its dicts as SSE."""
+    q: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    sentinel = object()
+
+    def worker() -> None:
+        try:
+            for ev in gen_fn():
+                loop.call_soon_threadsafe(q.put_nowait, ev)
+        except Exception as e:  # surfaced to the UI as an error event
+            loop.call_soon_threadsafe(
+                q.put_nowait, {"type": "error", "message": _friendly(e)}
+            )
+        finally:
+            loop.call_soon_threadsafe(q.put_nowait, sentinel)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    async def events():
+        while True:
+            ev = await q.get()
+            if ev is sentinel:
+                break
+            yield {"data": json.dumps(ev, ensure_ascii=False)}
+
+    return EventSourceResponse(events(), ping=10)
+
+
+def _friendly(e: Exception) -> str:
+    msg = str(e)
+    if "ConnectError" in type(e).__name__ or "Connection refused" in msg:
+        return "本机模型还没有准备好。稍等几秒再试一次。"
+    return msg or type(e).__name__
+
+
+# ---------------------------------------------------------------- status
+
+@app.get("/health")
+def health() -> dict:
+    return {"ok": True}
+
+
+@app.get("/status", dependencies=[Depends(auth)])
+def status() -> dict:
+    prof = store.profile()
+    its = store.items()
+    return {
+        "models": runtime.public(),
+        "catalog": catalog.stats(),
+        "library": library.stats(),
+        "onboarded": bool(store.get_pref("onboarded", False)),
+        "domains_onboarded": interview_flow.onboarded_domains(),
+        "name": store.get_pref("name", ""),
+        "counts": {
+            s: sum(1 for i in its if i["status"] == s)
+            for s in ("watched", "dropped", "want", "rejected")
+        },
+        "domain_counts": {
+            d: {s: sum(1 for i in its if i["status"] == s and i["domain"] == d)
+                for s in ("watched", "dropped", "want", "rejected")}
+            for d in DOMAINS
+        },
+        "covers_online": bool(store.get_pref("covers_online", True)),
+        "words": WORDS,
+        "pass_reasons": {d: [{"key": k, "label": reason_label(d, k), "effect": v["effect"]}
+                             for k, v in PASS_REASONS.items()] for d in DOMAINS},
+        "profile_version": prof["version"] if prof else None,
+        "stale": store.get_pref("stale", 0),
+        "data_path": str(USER_DB),
+    }
+
+
+@app.get("/usage", dependencies=[Depends(auth)])
+def usage() -> dict:
+    bench_path = os.path.join(os.path.dirname(USER_DB), "bench_speed.json")
+    repo_bench = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "data",
+        "bench_speed.json",
+    )
+    bench = None
+    for p in (bench_path, repo_bench):
+        if os.path.exists(p):
+            with open(p) as f:
+                bench = json.load(f)
+            break
+    return {**store.llm_summary(), "bench": bench, "big_ctx": BIG.ctx}
+
+
+class NameIn(BaseModel):
+    name: str
+
+
+@app.put("/name", dependencies=[Depends(auth)])
+def put_name(body: NameIn) -> dict:
+    store.set_pref("name", body.name.strip()[:24])
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- interview
+
+class StartIn(BaseModel):
+    domains: list[str] = ["film"]
+
+
+@app.post("/interview/start", dependencies=[Depends(auth)])
+def interview_start(body: StartIn | None = None) -> dict:
+    return interview_flow.start(body.domains if body else None)
+
+
+@app.get("/coldstart/wall", dependencies=[Depends(auth)])
+def coldstart_wall(domain: str = "film", page: int = 0, exclude: str = "") -> list[dict]:
+    if domain not in DOMAINS:
+        raise HTTPException(400, "unknown domain")
+    return interview_flow.wall(domain, page, {i for i in exclude.split(",") if i})
+
+
+class MarksIn(BaseModel):
+    domain: str
+    marks: dict[str, str]
+
+
+@app.post("/coldstart/marks", dependencies=[Depends(auth)])
+def coldstart_marks(body: MarksIn) -> dict:
+    return interview_flow.save_marks(body.domain, body.marks)
+
+
+@app.get("/interview", dependencies=[Depends(auth)])
+def interview_state() -> dict:
+    return interview_flow.state()
+
+
+class TextIn(BaseModel):
+    text: str
+
+
+@app.post("/interview/answer", dependencies=[Depends(auth)])
+async def interview_answer(body: TextIn):
+    return sse(lambda: interview_flow.answer(body.text))
+
+
+@app.post("/interview/finish", dependencies=[Depends(auth)])
+async def interview_finish():
+    return sse(interview_flow.finish)
+
+
+# ---------------------------------------------------------------- recommend
+
+class RecIn(BaseModel):
+    text: str = ""
+    chips: dict[str, str] = {}
+    mode: str = "layered"
+    domain: str = "film"
+
+
+@app.post("/recommend", dependencies=[Depends(auth)])
+async def recommend(body: RecIn):
+    req = {"text": body.text, "chips": body.chips, "domain": body.domain}
+    return sse(lambda: rec_flow.run(req, mode=body.mode))
+
+
+@app.get("/recs", dependencies=[Depends(auth)])
+def recs() -> list[dict]:
+    out = store.recs()
+    for r in out:
+        r["domain"] = r["request"].get("domain") or "film"
+    return out
+
+
+@app.get("/checkins", dependencies=[Depends(auth)])
+def checkins(domain: str | None = None) -> list[dict]:
+    return feedback_flow.checkins(domain)
+
+
+@app.post("/checkins/{item_id}/dismiss", dependencies=[Depends(auth)])
+def checkin_dismiss(item_id: str) -> dict:
+    feedback_flow.dismiss_checkin(item_id)
+    store.event("checkin_dismiss", {"id": item_id})
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- items
+
+def _with_title(it: dict) -> dict:
+    return {**it, "title": catalog.get(it["id"])}
+
+
+@app.get("/items", dependencies=[Depends(auth)])
+def items(status: str | None = None, domain: str | None = None) -> list[dict]:
+    its = store.items(status, domain)
+    ts = {t["id"]: t for t in catalog.get_many([i["id"] for i in its])}
+    return [{**i, "title": ts.get(i["id"])} for i in its]
+
+
+def _known(item_id: str) -> None:
+    if not catalog.get(item_id):
+        raise HTTPException(404, "找不到这部作品")
+
+
+@app.post("/items/{item_id}/feedback", dependencies=[Depends(auth)])
+def item_feedback(item_id: str, body: TextIn) -> dict:
+    _known(item_id)
+    out = feedback_flow.log(item_id, text=body.text)
+    out["item"] = _with_title(out["item"])
+    return out
+
+
+class LogIn(BaseModel):
+    status: str = "watched"
+    rating: float | None = None
+    text: str = ""
+    origin: str | None = None
+    done_on: str | None = None
+
+
+@app.post("/items/{item_id}/log", dependencies=[Depends(auth)])
+def item_log(item_id: str, body: LogIn) -> dict:
+    _known(item_id)
+    if body.status not in ("watched", "dropped"):
+        raise HTTPException(400, "unknown status")
+    out = feedback_flow.log(item_id, status=body.status, rating=body.rating, text=body.text,
+                            origin=body.origin, done_on=body.done_on)
+    feedback_flow.dismiss_checkin(item_id)
+    out["item"] = _with_title(out["item"])
+    return out
+
+
+class PassIn(BaseModel):
+    reason: str
+    words: str | None = None
+    rec_id: int | None = None
+
+
+@app.post("/items/{item_id}/pass", dependencies=[Depends(auth)])
+def item_pass(item_id: str, body: PassIn) -> dict:
+    _known(item_id)
+    if body.reason not in PASS_REASONS:
+        raise HTTPException(400, "unknown reason")
+    out = feedback_flow.pass_(item_id, body.reason, body.words, body.rec_id)
+    # "save it for later" is exactly what the check-in asks about later
+    if out["effect"] != "want":
+        feedback_flow.dismiss_checkin(item_id)
+    out["item"] = _with_title(out["item"])
+    return out
+
+
+class EditIn(BaseModel):
+    rating: float | None = None
+    clear_rating: bool = False
+    done_on: str | None = None
+    status: str | None = None
+    words: str | None = None
+
+
+@app.patch("/items/{item_id}", dependencies=[Depends(auth)])
+def item_edit(item_id: str, body: EditIn) -> dict:
+    if not store.item(item_id):
+        raise HTTPException(404, "没有这条记录")
+    if body.status and body.status not in ("watched", "dropped", "want", "rejected"):
+        raise HTTPException(400, "unknown status")
+    it = feedback_flow.edit(item_id, rating=body.rating, clear_rating=body.clear_rating,
+                            done_on=body.done_on, status=body.status, words=body.words)
+    return _with_title(it)
+
+
+# cover fetches wait on per-site rate limits; give them their own threads so
+# a wall of 24 covers can't starve the rest of the API
+_cover_pool = ThreadPoolExecutor(6, thread_name_prefix="cover")
+
+
+@app.get("/cover/{item_id}", dependencies=[Depends(auth_q)])
+async def cover(item_id: str):
+    p = await asyncio.get_running_loop().run_in_executor(_cover_pool, covers.cover, item_id)
+    if not p:
+        raise HTTPException(404, "no cover")
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=604800"})
+
+
+class StatusIn(BaseModel):
+    status: str
+    words: str | None = None
+
+
+@app.post("/items/{item_id}/status", dependencies=[Depends(auth)])
+def item_status(item_id: str, body: StatusIn) -> dict:
+    if body.status not in ("want", "rejected", "watched", "dropped"):
+        raise HTTPException(400, "unknown status")
+    return _with_title(feedback_flow.set_status(item_id, body.status, body.words))
+
+
+@app.delete("/items/{item_id}", dependencies=[Depends(auth)])
+def item_delete(item_id: str) -> dict:
+    store.delete_item(item_id)
+    store.event("delete", {"id": item_id})
+    return {"ok": True}
+
+
+@app.get("/search", dependencies=[Depends(auth)])
+def search(q: str, domain: str = "film") -> list[dict]:
+    if domain == "film":
+        return catalog.search(q)
+    return library.search(domain, q)
+
+
+@app.get("/titles", dependencies=[Depends(auth)])
+def titles(ids: str) -> list[dict]:
+    return catalog.get_many([i for i in ids.split(",") if i])
+
+
+# ---------------------------------------------------------------- profile
+
+@app.get("/profile", dependencies=[Depends(auth)])
+def get_profile() -> dict[str, Any]:
+    p = store.profile()
+    if not p:
+        return {"profile": None, "history": [], "titles": {}}
+    ids = sorted({e for s in p["doc"]["sections"] for c in s["claims"] for e in c["evidence"]})
+    return {
+        "profile": p,
+        "history": store.profile_history(),
+        "titles": {t["id"]: t for t in catalog.get_many(ids)},
+    }
+
+
+@app.post("/profile/consolidate", dependencies=[Depends(auth)])
+async def consolidate():
+    def run():
+        yield from profile_flow.consolidate(reason="manual")
+        store.set_pref("stale", 0)
+
+    return sse(run)
+
+
+class ProfileIn(BaseModel):
+    doc: dict
+
+
+@app.put("/profile", dependencies=[Depends(auth)])
+def put_profile(body: ProfileIn) -> dict:
+    return profile_flow.edit(body.doc)
+
+
+# ---------------------------------------------------------------- data
+
+class PrefIn(BaseModel):
+    covers_online: bool
+
+
+@app.put("/prefs", dependencies=[Depends(auth)])
+def put_prefs(body: PrefIn) -> dict:
+    store.set_pref("covers_online", body.covers_online)
+    return {"ok": True}
+
+
+@app.get("/export", dependencies=[Depends(auth)])
+def export() -> dict:
+    return {
+        "items": store.items(),
+        "profile": store.profile(),
+        "recs": store.recs(500),
+        "events": store.events(),
+    }
+
+
+@app.post("/reset", dependencies=[Depends(auth)])
+def reset() -> dict:
+    store.wipe()
+    return {"ok": True}

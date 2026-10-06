@@ -1,0 +1,35 @@
+# model weights and raw dumps are large; scripts fetch them
+models/
+data/raw/
+data/*.sqlite
+data/*.sqlite-*
+!data/catalog.sqlite
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+
+# node / electron
+node_modules/
+app/out/
+app/release/
+app/shots/
+
+.DS_Store
+
+# build outputs
+dist/
+presentation/out/片刻_演示视频_配乐.mp4
+presentation/video/.*.png
+# demo video exceeds GitHub's 100MB limit
+presentation/out/*.mp4
+
+# secrets
+.env
+.env.*
+*.pem
+*.key

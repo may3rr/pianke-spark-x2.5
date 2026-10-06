@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>片刻 初赛</title>
+<link rel="stylesheet" href="../app/src/renderer/src/styles/tokens.css">
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+
+<!-- 1 封面 -->
+<section class="slide cover" data-nofoot>
+  <div class="dom">
+    <span class="tile xl" data-shelf="film"></span>
+    <span class="tile xl" data-shelf="book"></span>
+    <span class="tile xl" data-shelf="music"></span>
+  </div>
+  <div class="kicker">Spark-X2.5 端侧模型创新挑战赛 初赛作品</div>
+  <div class="title">片刻</div>
+  <div class="en">Fewer films, better nights.</div>
+  <div class="tagline">Mac 上的书影音推荐应用。每次只推荐三部，说明理由。两个 Spark-X2.5 模型在本机运行，你的话、评分和口味画像不经过第三方。</div>
+  <div class="pills">
+    <span class="pill accent">Spark-X2.5-4B 与 1.7B</span>
+    <span class="pill">macOS 本机推理</span>
+    <span class="pill">影视 书 音乐</span>
+    <span class="pill">队伍 天天开心</span>
+  </div>
+  <div class="hero"><div class="shot" style="width:660px" data-img="shots/51-book-result.png" data-crop="0,0,1280,820"></div><div class="cap" style="text-align:right">真实界面：推荐《空山》的理由，用上了你看完《冷山》写下的感受</div></div>
+  <div class="people">
+    <div class="names">吕浩博</div>
+    <div class="affil">天津师范大学管理学院</div>
+  </div>
+  <div class="venue">2026 年 10 月</div>
+</section>
+
+<!-- 2 先说结论 -->
+<section class="slide">
+  <h1>只推荐三部，每一部都说清为什么</h1>
+  <div class="sub">片刻是 Mac 上的书影音推荐应用，两个 Spark-X2.5 模型都在本机运行</div>
+  <div class="body" style="justify-content:center; gap:20px">
+    <div class="big">
+      <div class="stat hero">
+        <div class="v">3<small>部</small></div>
+        <div class="k">每次只推荐三部，不做信息流</div>
+        <div class="d">理由里引用你自己说过的话，原话从本机数据库逐字读出</div>
+      </div>
+      <div class="stat">
+        <div class="v">79<small>%</small></div>
+        <div class="k">4B 说出的片名能在片库查到</div>
+        <div class="d">1.7B 只有 19%。挑选交给 4B，每部作品仍要先核实</div>
+      </div>
+      <div class="stat">
+        <div class="v">1.4<small>秒</small></div>
+        <div class="k">12 万 token 的记录命中缓存后读完</div>
+        <div class="d">首次读入 726 秒。推荐只读画像，整理画像才读全部记录</div>
+      </div>
+    </div>
+    <div class="oneline">
+      <span class="tile lg" style="background:var(--tile-indigo)" data-ic="LockFill"></span>
+      <div class="t">你的话、评分和画像只存在这台 Mac 上，联网请求里<span class="hl hl-ok">只有作品名、作者、年份或公开编号</span></div>
+    </div>
+    <div class="flow">
+      <div class="st"><i class="ic" data-ic="PencilFill"></i>说一句今天的状态</div>
+      <span class="chev" data-chev></span>
+      <div class="st m"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>4B 读画像定方向</div>
+      <span class="chev" data-chev></span>
+      <div class="st"><span class="tile" style="background:var(--accent)" data-ic="CheckCircleFill"></span>本地库核实候选</div>
+      <span class="chev" data-chev></span>
+      <div class="st m"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>4B 挑三部</div>
+      <span class="chev" data-chev></span>
+      <div class="st m"><span class="tile" style="background:var(--tile-purple)" data-ic="QuoteFill"></span>1.7B 整理评语</div>
+      <span class="chev" data-chev></span>
+      <div class="st"><i class="ic" data-ic="ArrowClockwise"></i>画像更新</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 章节 01 -->
+<section class="slide section" data-sec="1">
+  <div class="no">01</div>
+  <div class="st">项目背景</div>
+  <div class="sd">片刻要解决什么问题，为什么这件事适合放在端侧</div>
+  <div class="inside"><span><i>1</i>推荐越准，越需要私人上下文</span><span><i>2</i>你的信息留在本机，联网只查作品</span></div>
+</section>
+
+<!-- 4 问题 -->
+<section class="slide">
+  <h1>推荐越准，越需要私人上下文</h1>
+  <div class="sub">现有推荐方式的三个问题，以及片刻的回答</div>
+  <div class="body">
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:auto 0">
+      <div class="col g12">
+        <div class="card" style="min-height:220px">
+          <div class="n">1</div>
+          <div class="h">按停留时长优化</div>
+          <div class="d">信息流抓住的是此刻还想继续刷的冲动，不是看完觉得值。Kleinberg、Mullainathan 和 Raghavan 在 2022 年专门讨论过这种偏好不一致。</div>
+        </div>
+        <div class="card ans">
+          <div class="h t17">片刻的回答</div>
+          <div class="d">每次只推荐三部，附上理由。看完以后再问你值不值，下一次推荐会读到你的回答。</div>
+        </div>
+      </div>
+      <div class="col g12">
+        <div class="card" style="min-height:220px">
+          <div class="n">2</div>
+          <div class="h">口味说不清，只能靠点击猜</div>
+          <div class="d">协同过滤要在同一个书架上积累大量行为才能学到偏好，读不懂我喜欢它什么都没说出口这样的话，也没法把电影里的口味带到书上。</div>
+        </div>
+        <div class="card ans">
+          <div class="h t17">片刻的回答</div>
+          <div class="d">大语言模型直接读你的评语和对话，口味画像三个书架共用，单列一节书影音之间。</div>
+        </div>
+      </div>
+      <div class="col g12">
+        <div class="card" style="min-height:220px">
+          <div class="n">3</div>
+          <div class="h">准和私互相矛盾</div>
+          <div class="d">看过什么、为什么喜欢、当时累不累、和谁一起，这些正是推荐需要的上下文，也都是很私人的信息，交给云端并不合适。</div>
+        </div>
+        <div class="card ans">
+          <div class="h t17">片刻的回答</div>
+          <div class="d">模型和记忆都放在这台 Mac 上。联网只查公开的作品信息和封面，请求里没有关于你的内容。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 端侧边界 -->
+<section class="slide">
+  <h1>你的信息留在本机，联网只查作品</h1>
+  <div class="sub">全部出站请求从同一个模块发出，模块自己拼 URL，调用方只能传作品名这类字符串</div>
+  <div class="body">
+    <div style="display:grid; grid-template-columns:1.1fr 0.9fr 1fr; gap:16px; flex:1; min-height:0">
+      <div class="mac col g8">
+        <div class="row g8 t17 w6"><span class="tile" style="background:var(--tile-indigo)" data-ic="LockFill"></span>留在这台 Mac 上</div>
+        <div class="box"><div class="h">你的原话</div><div class="d">冷启动对话、评语、没看的原因，逐字保存</div></div>
+        <div class="box"><div class="h">星级、日期、状态</div><div class="d">每部作品一条记录，可在记录页编辑</div></div>
+        <div class="box"><div class="h">口味画像与近况</div><div class="d">四层记忆，存在本机 SQLite</div></div>
+        <div class="box m"><div class="h"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>Spark-X2.5-4B 与 1.7B</div><div class="d">llama.cpp 在本机运行，只监听 127.0.0.1</div></div>
+      </div>
+      <div class="col g12" style="justify-content:center">
+        <div class="box a" style="padding:20px">
+          <div class="h"><code style="font-size:15px">lookup/net.py</code></div>
+          <div class="d t15">唯一的出站模块</div>
+          <div class="row g4" style="margin-top:8px; flex-wrap:wrap"><span class="pill">缓存</span><span class="pill">按站点限速</span><span class="pill">连不上就暂停</span></div>
+        </div>
+        <div>
+          <div class="codehd">源码原文 <code>backend/pianke/lookup/net.py</code></div>
+          <code class="code" data-src="backend/pianke/lookup/net.py#L1-L6" style="font-size:11px; white-space:pre-wrap"></code>
+        </div>
+      </div>
+      <div class="col g8">
+        <div class="row g8 t17 w6"><i class="ic" data-ic="Magnifier"></i>发往公开来源</div>
+        <div class="panel col g8" style="padding:16px 20px">
+          <div class="t13 sec">请求里只有</div>
+          <div class="row g4" style="flex-wrap:wrap"><span class="pill ok">作品名</span><span class="pill ok">作者</span><span class="pill ok">年份</span><span class="pill ok">IMDb 等公开编号</span></div>
+          <div class="t13 sec" style="margin-top:8px">从不包含</div>
+          <div class="row g4" style="flex-wrap:wrap"><span class="pill">原话</span><span class="pill">星级</span><span class="pill">画像</span><span class="pill">姓名</span><span class="pill">设备标识</span></div>
+        </div>
+        <table class="t">
+          <tr><td>封面</td><td class="sec">豆瓣、维基百科、Open Library、Cover Art Archive、iTunes</td></tr>
+          <tr><td>核实</td><td class="sec">书库或曲库里没有时，按书名或专辑名查豆瓣读书和 iTunes</td></tr>
+        </table>
+        <div class="t13 sec">没有账号。设置里可以关掉联网封面，界面改用文字封面。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 章节 02 -->
+<section class="slide section" data-sec="2">
+  <div class="no">02</div>
+  <div class="st">产品功能</div>
+  <div class="sd">三个书架共用一套流程：冷启动、推荐、反馈、回访、记录与画像</div>
+  <div class="inside"><span><i>1</i>三个书架</span><span><i>2</i>冷启动</span><span><i>3</i>一次推荐</span><span><i>4</i>反馈与回访</span><span><i>5</i>记录与画像</span></div>
+</section>
+
+<!-- 7 产品总览 -->
+<section class="slide">
+  <h1>三个书架，一份口味</h1>
+  <div class="sub">影视、书、音乐各有自己的记录和片单，口味画像三个书架共用</div>
+  <div class="body" style="flex-direction:row; gap:32px; align-items:flex-start">
+    <div><div class="shot" style="width:700px" data-img="shots/13-compose.png" data-crop="0,0,1280,820"></div><div class="cap">首页：说一句今天的状态，选几个标签，片刻只挑三部</div></div>
+    <div class="col g12 grow">
+      <div class="card" style="padding:16px 20px"><div class="h"><span class="tile" data-shelf="film"></span>影视</div><div class="d">电影和剧集。本地片库 32,914 部，来自 IMDb 非商业数据集</div></div>
+      <div class="card" style="padding:16px 20px"><div class="h"><span class="tile" data-shelf="book"></span>书</div><div class="d">小说、散文、非虚构。本地书库 3,769 本，来自 Wikidata，库里没有时按书名联网核实</div></div>
+      <div class="card" style="padding:16px 20px"><div class="h"><span class="tile" data-shelf="music"></span>音乐</div><div class="d">以专辑为单位。本地曲库 5,575 张，来自 Wikidata，含华语和日韩专辑</div></div>
+      <div class="card" style="padding:16px 20px; background:var(--tile-purple-tint)"><div class="h"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>口味画像</div><div class="d" style="color:var(--text)">分五节：你偏爱的、你会避开的、书影音之间、你的习惯、最近的变化。每条结论都标出依据</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 冷启动 -->
+<section class="slide">
+  <h1>冷启动：先认封面，再聊几句</h1>
+  <div class="sub">认出看过的作品比凭空回忆省力，点过的每一部都已经是核实过的作品</div>
+  <div class="body" style="display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto; gap:24px 24px; align-content:center">
+    <div class="col g8">
+      <div class="row g12"><span class="step"><b>1</b>选书架</span><span class="t15 sec">可以多选，没选的以后点开时再认识</span></div>
+      <div class="shot" data-h="200" data-img="shots/05-domains.png" data-crop="345,315,590,240"></div>
+    </div>
+    <div class="col g8">
+      <div class="row g12"><span class="step"><b>2</b>封面墙</span><span class="t15 sec">点一下是喜欢，点两下是不喜欢</span></div>
+      <div class="shot" data-h="190" data-img="shots/07-wall-film-marked.png" data-crop="215,205,700,245"></div>
+    </div>
+    <div class="col g8">
+      <div class="row g12"><span class="step"><b>3</b>聊几句</span><span class="who m">4B</span><span class="t15 sec">从你点过的作品问起</span></div>
+      <div class="shot" data-h="200" data-img="shots/10-chat-done.png" data-crop="310,40,660,240"></div>
+    </div>
+    <div class="col g8">
+      <div class="row g12"><span class="step"><b>4</b>第一版画像</span><span class="who m">4B</span><span class="t15 sec">提到的作品逐一核实，结论标出依据</span></div>
+      <div class="shot" data-h="195" data-img="shots/33-profile.png" data-crop="440,400,640,230"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 一次推荐 -->
+<section class="slide">
+  <h1>一次推荐：读画像，定方向，核实，挑三部</h1>
+  <div class="sub">四步都在本机完成，界面如实显示每一步在做什么</div>
+  <div class="body" style="flex-direction:row; gap:24px; align-items:flex-start">
+    <div class="col g12 grow">
+      <div class="shot" data-h="260" data-img="shots/21-film-running.png" data-crop="310,210,890,350"></div>
+      <table class="t">
+        <tr><td>定方向 <span class="who m">4B</span></td><td class="sec">把画像和今晚的要求变成筛选条件，JSON 语法只允许这个书架真实存在的类型、语种和地区</td></tr>
+        <tr><td>核实</td><td class="sec">模型想到的每部作品先查本地库，再按名字联网查，查不到的直接丢掉</td></tr>
+        <tr><td>挑三部 <span class="who m">4B</span></td><td class="sec">id 只能取自候选清单；理由里的因为你说过，只能指向你自己的记录</td></tr>
+      </table>
+    </div>
+    <div class="shot" data-h="510" data-img="shots/50-film-result.png" data-crop="430,70,660,740"></div>
+  </div>
+</section>
+
+<!-- 10 反馈与回访 -->
+<section class="slide">
+  <h1>每一部推荐都有下文</h1>
+  <div class="sub">看过了就打星写评语，没看就选一个原因，过几天片刻会回来问一次</div>
+  <div class="body" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start">
+    <div class="col g8">
+      <div class="row g8"><span class="pill accent" style="font-size:15px">看过了</span><span class="who m">1.7B</span></div>
+      <div class="shot" style="width:100%" data-img="shots/23-log-panel.png" data-crop="445,530,640,235"></div>
+      <div class="t15 sec">0 到 5 星，可以拖动，精确到半星，星级只由你给。1.7B 从评语里整理喜欢和不喜欢的方面，原话逐字保存。</div>
+      <div class="row g8" style="margin-top:12px"><span class="pill" style="font-size:15px">第二天回访</span><span class="t15 sec">加进片单的，或那晚一部都没碰的，下次打开时问一次</span></div>
+      <div class="shot" style="width:100%" data-img="shots/40-checkin.png" data-crop="290,100,950,110"></div>
+    </div>
+    <div class="col g8">
+      <div class="row g8"><span class="pill" style="font-size:15px">没看</span><span class="t15 sec">选一个原因，每个原因写到不同的地方</span></div>
+      <div class="shot" style="width:100%" data-img="shots/25-pass-panel.png" data-crop="445,640,640,150"></div>
+      <table class="t" style="margin-top:4px">
+        <tr><td>想看，先存着</td><td class="sec">进片单、书单或歌单，之后会回访</td></tr>
+        <tr><td>不感兴趣</td><td class="sec" rowspan="2">带原因的负面记录，整理画像时会读</td></tr>
+        <tr><td>知道它，不对胃口</td></tr>
+        <tr><td>今晚不合适</td><td class="sec">只进最近两周的近况，长期画像看不到</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 11 记录与画像 -->
+<section class="slide">
+  <h1>记录可以编辑，画像有据可查</h1>
+  <div class="sub">每个书架一份日志，点开是像 Notion 一样可编辑的记录页；画像每条结论都标出依据</div>
+  <div class="body" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px">
+    <div class="col g8">
+      <div class="shot" style="width:100%" data-img="shots/30-film-records.png" data-crop="300,0,980,700"></div>
+      <div class="t15"><b class="w6">记录</b> <span class="sec">画廊或表格两种视图，按看完、没看完筛选</span></div>
+    </div>
+    <div class="col g8">
+      <div class="shot" style="width:100%" data-img="shots/31-record-page.png" data-crop="440,50,640,560"></div>
+      <div class="t15"><b class="w6">记录页</b> <span class="sec">状态、星级、日期、来由、评语都能改；改了评语，1.7B 会重读一遍</span></div>
+    </div>
+    <div class="col g8">
+      <div class="shot" style="width:100%" data-img="shots/33-profile.png" data-crop="440,50,640,700"></div>
+      <div class="t15"><b class="w6">口味画像</b> <span class="sec">4B 读完全部记录后重写，引用的作品逐条校验，你改过的条目永远保留</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 章节 03 -->
+<section class="slide section" data-sec="3">
+  <div class="no">03</div>
+  <div class="st">技术实现</div>
+  <div class="sd">采用的技术、产品架构、两个模型的分工，以及在真机上的实测</div>
+  <div class="inside"><span><i>1</i>技术架构</span><span><i>2</i>两个模型的分工</span><span><i>3</i>分层记忆与长上下文</span><span><i>4</i>对比实验</span><span><i>5</i>端侧实测与工程</span><span><i>6</i>创意与前瞻</span></div>
+</section>
+
+<!-- 13 架构 -->
+<section class="slide">
+  <h1>技术架构：全部在一台 Mac 上</h1>
+  <div class="sub">Electron 界面、FastAPI 后端、两个 llama.cpp 模型服务和四层 SQLite 记忆，出站请求只有一个口</div>
+  <div class="body">
+    <div class="arch">
+      <div class="lane">
+        <div class="lh">界面</div>
+        <div class="box" style="flex:1">
+          <div class="h"><i class="ic" data-ic="FilmFill"></i>Electron 桌面端</div>
+          <div class="d">React、Vite、Tailwind；颜色与图标统一来自一份设计 token</div>
+          <div class="col g4" style="margin-top:8px">
+            <span class="pill">冷启动与封面墙</span><span class="pill">首页与推荐结果</span><span class="pill">看过了与没看</span><span class="pill">记录页与画像</span>
+          </div>
+        </div>
+      </div>
+      <div class="link"><span data-chev></span>SSE<br>127.0.0.1</div>
+      <div class="lane">
+        <div class="lh">后端 FastAPI，只监听 127.0.0.1</div>
+        <div class="box"><div class="h">流程</div><div class="d">冷启动访谈、推荐四步、反馈、回访、整理画像，三个书架共用</div></div>
+        <div class="row g12">
+          <div class="box m grow"><div class="h"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>4B</div><div class="d">llama-server，Q4_K_M，上下文 128K，Metal</div></div>
+          <div class="box m grow"><div class="h"><span class="tile" style="background:var(--tile-purple)" data-ic="SparklesFill"></span>1.7B</div><div class="d">llama-server，Q4_K_M，上下文 16K，Metal</div></div>
+        </div>
+        <div class="box"><div class="h">记忆 user.sqlite</div><div class="d">L0 事件、L1 记录、L2 画像、L3 近况</div></div>
+        <div class="row g12">
+          <div class="box grow"><div class="h">片库</div><div class="d">IMDb，32,914 部</div></div>
+          <div class="box grow"><div class="h">书库与曲库</div><div class="d">Wikidata，3,769 本与 5,575 张</div></div>
+        </div>
+      </div>
+      <div class="link"><span data-chev></span>只有作品名</div>
+      <div class="lane">
+        <div class="lh">出站</div>
+        <div class="box a"><div class="h"><code>lookup/net.py</code></div><div class="d">唯一的出站模块；缓存在 cache.sqlite，只存公开数据，可随时删除</div></div>
+        <div class="box" style="flex:1"><div class="h">公开来源</div><div class="d">豆瓣、维基百科、Wikidata、Open Library、Cover Art Archive、iTunes</div></div>
+        <div class="box ok"><div class="h">联网失败时</div><div class="d">请求失败和确实没有分开记；连不上的站点暂停 5 分钟，界面改用文字封面</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 两个模型 -->
+<section class="slide">
+  <h1>两个模型的分工</h1>
+  <div class="sub">需要理解口味的交给 4B，高频、低风险、要快的交给 1.7B；所有输出都走 JSON 语法约束</div>
+  <div class="body" style="flex-direction:row; gap:24px">
+    <div class="col g12" style="width:560px">
+      <table class="t">
+        <tr><th>模型</th><th>任务</th></tr>
+        <tr><td><span class="who m">4B</span></td><td>冷启动对话的回应，抽出对话里提到的作品</td></tr>
+        <tr><td><span class="who m">4B</span></td><td>定方向：画像和今晚的要求 → 片库筛选条件</td></tr>
+        <tr><td><span class="who m">4B</span></td><td>从候选清单里挑三部，写理由，标出依据的记录</td></tr>
+        <tr><td><span class="who m">4B</span></td><td>整理画像：一次读完全部记录，重写五节画像</td></tr>
+        <tr><td><span class="who s">1.7B</span></td><td>把评语整理成结构化记录，平均 0.92 秒</td></tr>
+      </table>
+      <div class="card" style="padding:16px 20px">
+        <div class="h t17">为什么选 Spark-X2.5</div>
+        <div class="d">4B 在 18GB 内存的 Mac 上能读完 12 万 token 的记录；同系列两个尺寸用同一套提示词和输出格式，可以按任务的难度分配，也方便做替换对比。</div>
+      </div>
+    </div>
+    <div class="col g12 grow">
+      <div>
+        <div class="codehd">挑三部的输出格式：id 只能取自候选清单 <code>flows/recommend.py</code></div>
+        <code class="code" data-src="backend/pianke/flows/recommend.py#L477-L487"></code>
+      </div>
+      <div>
+        <div class="codehd">评语里没说的心情和同伴，一律丢掉 <code>flows/feedback.py</code></div>
+        <code class="code" data-src="backend/pianke/flows/feedback.py#L73-L78"></code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 15 分层记忆与长上下文 -->
+<section class="slide">
+  <h1>推荐只读画像，长上下文留给整理</h1>
+  <div class="sub">记录从 50 条涨到 5000 条，推荐的输入长度不变；整理画像时 4B 把全部记录完整读一遍</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="col g8" style="width:500px">
+      <table class="t">
+        <tr><th>层</th><th>内容</th><th>谁读</th></tr>
+        <tr><td>L0 事件</td><td class="sec">说过、做过的一切，只追加</td><td class="sec">审计与导出</td></tr>
+        <tr><td>L1 记录</td><td class="sec">每部作品一条：星级、方面、评语原话</td><td class="sec">整理画像时全部读</td></tr>
+        <tr><td>L2 画像</td><td class="sec">五节口味画像，每条附依据，有版本</td><td class="sec">每次推荐</td></tr>
+        <tr><td>L3 近况</td><td class="sec">最近两周，含今晚不合适跳过的</td><td class="sec">每次推荐</td></tr>
+      </table>
+      <div class="t15 sec" style="margin-top:8px">推荐时另带几条和候选相关的记录，同书架为主，再带几条别的书架里感受最强的。</div>
+    </div>
+    <div class="col g12 grow">
+      <div class="row" style="justify-content:space-between"><span class="t17 w6">4B 读入全部记录的耗时</span><span class="t13 sec">M3 Pro 18GB，Q4_K_M，llama.cpp Metal</span></div>
+      <div class="bars" id="bench"></div>
+      <div class="row g16 t13 sec"><span class="row g4"><i class="dot" style="width:10px;height:10px;border-radius:5px;background:var(--tile-grey)"></i>首次读入</span><span class="row g4"><i style="width:10px;height:10px;border-radius:5px;background:var(--ok)"></i>同一前缀命中缓存</span></div>
+      <div class="card" style="padding:14px 18px; background:var(--ok-tint)"><div class="d" style="color:var(--text)">首次读完 12.2 万 token 要 12 分钟，所以画像整理放在不赶时间的时候做；同一份记录再读一次只要 1.4 秒。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 16 对比实验 -->
+<section class="slide">
+  <h1>为什么挑选交给 4B，整理评语交给 1.7B</h1>
+  <div class="sub">同一套提示词，分别换上两个模型实测；数据见 data/eval_ablation.json，脚本 eval_ablation.py 可复跑</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="col g16" style="width:540px">
+      <div class="t17 w6">直接说出片名，能在片库里查到的比例</div>
+      <div class="bars">
+        <div class="bar"><span class="lab">4B</span><span class="tr"><i class="p" style="width:79.2%"></i></span><span class="v">79%<small>38/48</small></span></div>
+        <div class="bar"><span class="lab">1.7B</span><span class="tr"><i style="width:18.8%"></i></span><span class="v">19%<small>9/48</small></span></div>
+      </div>
+      <div class="card" style="padding:14px 18px">
+        <div class="d">1.7B 说出的多是不存在的片，例如 <span class="hl hl-model">春日花开 2022</span>、<span class="hl hl-model">海边的图书馆 2023</span>。4B 也有查不到的，所以每部作品都要先核实，查不到就丢掉。</div>
+      </div>
+      <div class="card" style="padding:14px 18px">
+        <div class="h t17">id 约束</div>
+        <div class="d">挑三部时不加约束和加枚举约束各跑 24 次，越界都是 0。约束保留下来当保险，换模型也不会推荐清单以外的作品。</div>
+      </div>
+    </div>
+    <div class="col g12 grow">
+      <div class="t17 w6">把评语整理成结构化记录，12 条</div>
+      <table class="t">
+        <tr><th>指标</th><th style="text-align:right">1.7B</th><th style="text-align:right">4B</th></tr>
+        <tr><td>判断看完与否</td><td class="num">83%</td><td class="num">92%</td></tr>
+        <tr><td>星级误差在 1 星以内</td><td class="num">83%</td><td class="num">100%</td></tr>
+        <tr><td>原话逐字保留</td><td class="num">100%</td><td class="num">100%</td></tr>
+        <tr><td>平均用时</td><td class="num" style="color:var(--ok-text)">0.92 秒</td><td class="num">1.84 秒</td></tr>
+      </table>
+      <div class="t15 sec">评语整理每条记录都要做，用 1.7B 快一倍。看完与否以你按的按钮为准，星级以你自己打的为准，模型的判断只在你没给时补位，所以 1.7B 的误差不会覆盖你的选择。</div>
+    </div>
+  </div>
+</section>
+
+<!-- 17 端侧实测与工程 -->
+<section class="slide">
+  <h1>端侧实测与工程质量</h1>
+  <div class="sub">数字都来自这台测试机和仓库里的脚本，可以复跑</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="col g12" style="width:560px">
+      <div class="t17 w6">在这台 Mac 上</div>
+      <table class="t">
+        <tr><td>测试机</td><td class="sec">Apple M3 Pro，18GB 内存</td></tr>
+        <tr><td>模型文件</td><td class="sec">4B 2.6 GB，1.7B 1.1 GB，均为 Q4_K_M 量化</td></tr>
+        <tr><td>推理</td><td class="sec">llama.cpp，Metal 加速，flash attention</td></tr>
+        <tr><td>一次推荐</td><td class="sec">4B 用时 71.1 秒，见下方界面原文</td></tr>
+        <tr><td>整理一条评语</td><td class="sec">1.7B 平均 0.92 秒</td></tr>
+        <tr><td>生成速度</td><td class="sec">4B 在 4K 上下文时 27.8 token/秒</td></tr>
+      </table>
+      <div class="shot" style="width:560px" data-img="shots/26-after-actions.png" data-crop="440,705,640,50"></div>
+      <div class="cap" style="margin-top:0">推荐结果底部的说明，用时由后端如实记录</div>
+    </div>
+    <div class="col g12 grow">
+      <div class="t17 w6">工程</div>
+      <div class="card" style="padding:14px 18px"><div class="h t17"><i class="ic" data-ic="CheckCircleFill" style="color:var(--ok)"></i>16 个后端测试全部通过</div><div class="d">覆盖作品核实与拒绝编造的片名、没看原因的去向、半星评分、回访只问一次、你改过的画像条目保留</div></div>
+      <div class="card" style="padding:14px 18px"><div class="h t17">可复现</div><div class="d">build_catalog.py 和 build_library.py 从公开数据建库；bench_speed.py 和 eval_ablation.py 复跑本页数字；驱动脚本在真机上自动操作界面，PPT 里的界面图都由它拍摄</div></div>
+      <div class="card" style="padding:14px 18px"><div class="h t17">出错时</div><div class="d">模型输出走 JSON 语法约束，引用的记录 id 逐条校验；请求失败和确实没有分开记；模型没启动时界面如实显示状态</div></div>
+      <div class="card" style="padding:14px 18px"><div class="h t17">一键运行</div><div class="d">run.sh 构建界面并打开应用，后端和两个模型由应用自动拉起</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 18 创意与前瞻 -->
+<section class="slide">
+  <h1>创意与前瞻：口味可以跨书架迁移</h1>
+  <div class="sub">在电影里喜欢克制叙述的人，读小说时多半也是；大语言模型读得懂这种说法</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="col g12" style="width:540px">
+      <div class="card ans">
+        <div class="h t17">书影音之间</div>
+        <div class="d" style="color:var(--text)">推荐书时会带上几条电影和音乐里感受最强的记录。下面是真机上的一次书推荐，理由用上了你刚给《冷山》写的评语。</div>
+        <div class="shot" style="width:100%; margin-top:4px" data-img="shots/51-book-result.png" data-crop="445,555,650,95"></div>
+      </div>
+      <div class="card">
+        <div class="h t17">少而准的推荐</div>
+        <div class="d">每次三部，理由引用你自己的话；没看的原因分四种去向，今晚不合适不会被当成不喜欢。</div>
+      </div>
+      <div class="card">
+        <div class="h t17">端侧让私人上下文可以放心用</div>
+        <div class="d">累了、和谁一起、为什么弃了，这些话说给本机的模型听，不用担心被拿去做别的事。</div>
+      </div>
+    </div>
+    <div class="col g12 grow">
+      <div class="t17 w6">下一步</div>
+      <table class="t">
+        <tr><td>手机端</td><td class="sec">同一份记忆在手机上运行，需要移动端推理 SDK</td></tr>
+        <tr><td>拍照建档</td><td class="sec">拍书脊、海报或唱片封套加入记录，需要小尺寸视觉模型</td></tr>
+        <tr><td>画像缓存落盘</td><td class="sec">打开 llama.cpp 的 slot 保存，重启后整理画像不必从头读</td></tr>
+        <tr><td>更快的长上下文</td><td class="sec">12 万 token 首次读入 12 分钟，希望有官方 Metal 优化或 MLX 版本</td></tr>
+        <tr><td>更多书架</td><td class="sec">播客、游戏、展览，沿用同一套推荐管线</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 19 章节 04 -->
+<section class="slide section" data-sec="4">
+  <div class="no">04</div>
+  <div class="st">团队与声明</div>
+  <div class="sd">团队介绍、合作资源与项目原创性声明</div>
+  <div class="inside"><span><i>1</i>团队介绍</span><span><i>2</i>项目原创性声明</span></div>
+</section>
+
+<!-- 20 团队 -->
+<section class="slide">
+  <h1>团队介绍</h1>
+  <div class="sub">天天开心，学生团队，未注册公司，未融资</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="card" style="width:520px; padding:28px 32px; gap:12px; align-self:flex-start">
+      <div class="row g12"><span class="tile xl" style="background:var(--accent)" data-ic="PersonFill"></span><div><div class="t26">吕浩博</div><div class="t15 sec">主负责人</div></div></div>
+      <table class="t white" style="margin-top:8px">
+        <tr><td>现在</td><td>天津师范大学管理学院，博士研究生，信息资源管理方向</td></tr>
+        <tr><td>此前</td><td>大连外国语大学，图书情报硕士，2026 年毕业</td></tr>
+        <tr><td>研究</td><td>大模型智能体、多智能体检索增强生成、大模型引用幻觉的检测与抑制</td></tr>
+      </table>
+      <div class="t15 sec">片刻要求模型提到的每部作品都先核实，这个设计来自对大模型幻觉的研究积累。</div>
+    </div>
+    <div class="col g12 grow">
+      <div class="t17 w6">团队架构</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px">
+        <div class="card" style="padding:16px"><div class="h t17">模型与推荐管线</div><div class="d">提示词与输出格式、推荐四步、画像整理</div></div>
+        <div class="card" style="padding:16px"><div class="h t17">桌面端与交互</div><div class="d">Electron 界面、冷启动、反馈与记录页</div></div>
+        <div class="card" style="padding:16px"><div class="h t17">数据与评测</div><div class="d">片库、书库、曲库，测速与对比实验</div></div>
+      </div>
+      <div class="t17 w6" style="margin-top:8px">合作伙伴资源</div>
+      <div class="card" style="padding:16px 20px"><div class="d">暂无商业合作伙伴。作品数据来自公开数据集 IMDb 非商业数据集与 Wikidata，推理基于开源的 llama.cpp。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 21 原创性声明 -->
+<section class="slide">
+  <h1>项目原创性声明</h1>
+  <div class="sub">天天开心团队就参赛作品片刻作如下声明</div>
+  <div class="body" style="flex-direction:row; gap:32px">
+    <div class="card" style="width:640px; padding:32px; gap:32px; align-self:flex-start">
+      <div class="t20" style="line-height:1.6; font-weight:500">本团队承诺，参赛作品片刻的方案与成果均为团队原创，内容真实。作品中使用的第三方数据与开源软件均按其许可使用，并在本页列明。如发生知识产权纠纷，由参赛者自行承担责任。</div>
+      <div class="row" style="justify-content:space-between"><span class="t17 w6">天天开心 吕浩博</span><span class="t15 sec">2026 年 10 月</span></div>
+    </div>
+    <div class="col g12 grow">
+      <div class="t17 w6">致谢与第三方资源</div>
+      <table class="t">
+        <tr><td>模型</td><td class="sec">Spark-X2.5-4B、Spark-X2.5-1.7B</td></tr>
+        <tr><td>推理</td><td class="sec">llama.cpp</td></tr>
+        <tr><td>片库</td><td class="sec">IMDb 非商业数据集</td></tr>
+        <tr><td>书库与曲库</td><td class="sec">Wikidata，CC0</td></tr>
+        <tr><td>封面与核实</td><td class="sec">豆瓣、维基百科、Open Library、Cover Art Archive、iTunes Search API</td></tr>
+        <tr><td>界面</td><td class="sec">Electron、React、Vite、Tailwind CSS</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script src="icons.gen.js"></script>
+<script src="code.gen.js"></script>
+<script>
+  const svg = (name) => {
+    const body = (window.ICONS || {})[name]
+    if (!body) { console.warn('missing icon', name); return '' }
+    return `<svg viewBox="0 0 24 24" fill="currentColor">${body}</svg>`
+  }
+  // 书架色块：与 app/src/renderer/src/lib/domains.ts、Sidebar.tsx 一致
+  const SHELF = { film: ['--tile-indigo', 'MoonFill'], book: ['--tile-teal', 'BookFill'], music: ['--tile-pink', 'MusicNoteFill'] }
+  document.querySelectorAll('[data-shelf]').forEach(el => {
+    const [c, ic] = SHELF[el.dataset.shelf]
+    el.style.background = `var(${c})`
+    el.dataset.ic = ic
+  })
+  document.querySelectorAll('[data-ic]').forEach(el => { el.innerHTML = svg(el.dataset.ic) })
+  document.querySelectorAll('[data-chev]').forEach(el => {
+    el.innerHTML = '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M4 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  })
+  document.querySelectorAll('[data-src]').forEach(el => { el.innerHTML = (window.CODE || {})[el.dataset.src] || '' })
+
+  // 测速图：data/bench_speed.json 的原始数字
+  const BENCH = [[4051, 53, 9.84, 0.32], [16242, 215, 41.42, 0.93], [32554, 431, 97.09, 0.7], [65239, 863, 260.71, 2.15], [122446, 1618, 726.3, 1.38]]
+  const maxS = 726.3
+  document.getElementById('bench').innerHTML = BENCH.map(([ctx, rec, first, cached]) => `
+    <div class="bar" style="grid-template-columns:110px 1fr 130px">
+      <span class="lab">${(ctx / 1000).toFixed(ctx < 10000 ? 1 : 0)}K<small>${rec} 条记录</small></span>
+      <span class="col g4"><span class="tr"><i style="width:${Math.max(first / maxS * 100, 1.2)}%"></i></span><span class="tr"><i class="o" style="width:${Math.max(cached / maxS * 100, 1.2)}%"></i></span></span>
+      <span class="v" style="font-size:17px">${first >= 100 ? Math.round(first) : first.toFixed(1)}<small>秒</small><br><span style="color:var(--ok-text)">${cached}</span><small>秒</small></span>
+    </div>`).join('')
+
+  // 章节页顶部目录，对应初赛必交内容
+  const SECS = ['项目背景', '产品功能', '技术实现', '团队与声明']
+  document.querySelectorAll('.section').forEach(s => {
+    const cur = +s.dataset.sec
+    const t = document.createElement('div')
+    t.className = 'toc'
+    t.innerHTML = SECS.map((n, i) => `<span class="${i + 1 === cur ? 'on' : ''}"><b>0${i + 1}</b>${n}</span>`).join('')
+    s.prepend(t)
+  })
+
+  // 页脚
+  const slides = [...document.querySelectorAll('.slide')]
+  slides.forEach((s, i) => {
+    if (s.hasAttribute('data-nofoot')) return
+    const f = document.createElement('div')
+    f.className = 'foot'
+    f.innerHTML = `<span>天天开心 片刻 Spark-X2.5 端侧模型创新挑战赛</span><span>${i + 1} / ${slides.length}</span>`
+    s.appendChild(f)
+  })
+
+  // 截图：窗口 1280 × 820，拍摄时 2 倍像素；data-crop 是窗口坐标 x,y,w,h，只裁切不缩放比例
+  const WIN_W = 1280
+  const shots = [...document.querySelectorAll('.shot')]
+  let pending = shots.length
+  const done = () => { if (--pending <= 0) window.deckReady = true }
+  if (!pending) window.deckReady = true
+  shots.forEach(el => {
+    const [x, y, w, h] = el.dataset.crop.split(',').map(Number)
+    if (el.dataset.h) el.style.width = (+el.dataset.h) * w / h + 'px'
+    const W = el.clientWidth
+    const s = W / w
+    el.style.height = h * s + 'px'
+    const img = new Image()
+    img.onload = done
+    img.onerror = () => { el.style.background = 'var(--high-tint)'; el.dataset.missing = el.dataset.img; done() }
+    img.src = el.dataset.img
+    img.style.width = WIN_W * s + 'px'
+    img.style.left = -x * s + 'px'
+    img.style.top = -y * s + 'px'
+    el.appendChild(img)
+  })
+
+  // 溢出检查：任何元素超出 .body 或页面底部的页脚线
+  window.deckOverflow = () => {
+    const out = []
+    slides.forEach((s, i) => {
+      const sb = s.getBoundingClientRect()
+      const limit = sb.top + 720 - 44
+      s.querySelectorAll('.body *, .cover *').forEach(el => {
+        if (el.closest('.shot')) return
+        const r = el.getBoundingClientRect()
+        if (r.height && (r.bottom > limit + 1 || r.right > sb.right - 40)) out.push({ page: i + 1, what: (el.className || el.tagName) + ' ' + (el.textContent || '').slice(0, 20) })
+      })
+      document.querySelectorAll('[data-missing]').forEach(el => { if (s.contains(el)) out.push({ page: i + 1, what: '缺图 ' + el.dataset.missing }) })
+    })
+    const seen = new Set()
+    return out.filter(o => { const k = o.page + o.what; if (seen.has(k)) return false; seen.add(k); return true }).slice(0, 40)
+  }
+</script>
+</body>
+</html>
