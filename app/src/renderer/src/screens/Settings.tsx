@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { get, post, put, type Status } from '../lib/api'
+import { get, post, put, type LlmSettings, type Status } from '../lib/api'
+import { modelDot, modelStatusLabel } from '../lib/models'
 import { BooksFillIcon, CpuFillIcon, GearFillIcon, LockFillIcon, Tile, WifiSlashFillIcon } from '../components/Icons'
 
 interface Usage {
@@ -33,7 +34,8 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
         </span>
         <h1 className="page-title">设置</h1>
 
-        <h2 className="section-h">本机模型</h2>
+        <h2 className="section-h">模型</h2>
+        <ModelSource llm={status.llm} onSaved={onReset} />
         <div className="set-card">
           {status.models.map((m) => {
             const u = usage?.by_model.find((x) => x.model === m.name)
@@ -44,7 +46,9 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                   <div style={{ fontWeight: 500 }}>{m.name}</div>
                   <div className="t13 secondary">
                     {m.key === 'big' ? '定方向、挑片、整理口味画像' : '把你说的话整理成记录'}
-                    {`。${m.file}，${gb(m.size_bytes)}，上下文 ${(m.ctx / 1024).toFixed(0)}K`}
+                    {m.provider === 'api'
+                      ? `。经 ${m.host} 调用`
+                      : `。${m.file}，${gb(m.size_bytes)}，上下文 ${(m.ctx / 1024).toFixed(0)}K，用到时才加载`}
                   </div>
                   {u && (
                     <div className="t13 secondary">
@@ -54,8 +58,8 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                   {m.error && <div className="t13 danger">{m.error}</div>}
                 </div>
                 <span className="set-val flex items-center" style={{ gap: 6 }}>
-                  <span className={`status-dot ${m.status === 'ready' ? 'ready' : m.status === 'loading' ? 'loading' : 'error'}`} />
-                  {m.status === 'ready' ? '运行中' : m.status === 'loading' ? '加载中' : '不可用'}
+                  <span className={`status-dot ${modelDot(m)}`} />
+                  {m.provider === 'api' ? (m.status === 'ready' ? '接口' : '未配置') : m.status === 'ready' ? '运行中' : modelStatusLabel(m)}
                 </span>
               </div>
             )
@@ -205,5 +209,167 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
         </div>
       </div>
     </>
+  )
+}
+
+interface TestResult {
+  model: string
+  ok: boolean
+  answer?: string
+  seconds?: number
+  error?: string
+}
+
+/** Local Spark-X2.5, or any OpenAI-compatible endpoint. The key is write-only:
+ *  the backend keeps it and only ever sends back a hint. */
+function ModelSource({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }) {
+  const [mode, setMode] = useState(llm.mode)
+  const [baseUrl, setBaseUrl] = useState(llm.base_url)
+  const [key, setKey] = useState('')
+  const [big, setBig] = useState(llm.big_model)
+  const [small, setSmall] = useState(llm.small_model)
+  const [busy, setBusy] = useState<'' | 'save' | 'test'>('')
+  const [results, setResults] = useState<TestResult[] | null>(null)
+  const [err, setErr] = useState('')
+  const dirty =
+    mode !== llm.mode || baseUrl !== llm.base_url || key !== '' || big !== llm.big_model || small !== llm.small_model
+  const loopback = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(baseUrl)
+
+  const save = async (m = mode) => {
+    setBusy('save')
+    setErr('')
+    setResults(null)
+    try {
+      await put('/llm', {
+        mode: m,
+        base_url: baseUrl,
+        api_key: key === '' ? null : key,
+        big_model: big,
+        small_model: small,
+        ctx: llm.ctx,
+      })
+      setKey('')
+      onSaved()
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const test = async () => {
+    if (dirty) await save()
+    setBusy('test')
+    setResults(null)
+    try {
+      setResults((await post<{ results: TestResult[] }>('/llm/test')).results)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="set-card" style={{ padding: '12px 16px' }}>
+      <div className="seg">
+        {(
+          [
+            ['local', '本机 Spark-X2.5'],
+            ['api', 'OpenAI 兼容接口'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            className={mode === k ? 'on' : ''}
+            onClick={() => {
+              setMode(k)
+              // switching back to local needs nothing else; apply it at once
+              if (k === 'local' && llm.mode !== 'local') save('local')
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'local' ? (
+        <div className="t13 secondary" style={{ marginTop: 8 }}>
+          两个 Spark-X2.5 模型在本机运行，用到时才加载。你说的话不出这台 Mac。
+        </div>
+      ) : (
+        <>
+          <div className="t13 secondary" style={{ marginTop: 8 }}>
+            OpenAI、DeepSeek、OpenRouter 这类服务，或本机的 Ollama、LM Studio，只要兼容 OpenAI 的
+            /chat/completions 接口都可以用。
+          </div>
+          <label className="field">
+            <span className="field-label">接口地址</span>
+            <input
+              className="field-input"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              spellCheck={false}
+            />
+            <div className="field-hint">一般以 /v1 结尾。Ollama 填 http://localhost:11434/v1</div>
+          </label>
+          <label className="field">
+            <span className="field-label">API Key</span>
+            <input
+              className="field-input"
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder={llm.has_key ? `已保存（${llm.key_hint}），留空则不改` : loopback ? '本机服务一般不需要' : 'sk-...'}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <div className="field-hint">只存在本机的 llm.json 里，清空记忆和导出都不会带上它。</div>
+          </label>
+          <label className="field">
+            <span className="field-label">主模型</span>
+            <input
+              className="field-input"
+              value={big}
+              onChange={(e) => setBig(e.target.value)}
+              placeholder="gpt-4.1-mini、deepseek-chat、qwen3:8b"
+              spellCheck={false}
+            />
+            <div className="field-hint">访谈、定方向、挑选、整理口味画像。</div>
+          </label>
+          <label className="field">
+            <span className="field-label">轻量模型（可选）</span>
+            <input
+              className="field-input"
+              value={small}
+              onChange={(e) => setSmall(e.target.value)}
+              placeholder={big || '留空则和主模型相同'}
+              spellCheck={false}
+            />
+            <div className="field-hint">把你写的感受整理成记录，调用最频繁，可以用便宜快速的模型。</div>
+          </label>
+          {!loopback && baseUrl && (
+            <div className="t13" style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
+              用这个接口时，你的话、记录和口味画像会在聊天和推荐时发给 {baseUrl.replace(/^https?:\/\//, '').split('/')[0]}
+              。片刻自己仍然只在本机保存它们。
+            </div>
+          )}
+          <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+            <button className="pill-sm" disabled={!dirty || !!busy} onClick={() => save()}>
+              {busy === 'save' ? '正在保存' : '保存'}
+            </button>
+            <button className="pill-sm" disabled={!baseUrl || !big || !!busy} onClick={test}>
+              {busy === 'test' ? '正在测试' : dirty ? '保存并测试' : '测试连接'}
+            </button>
+          </div>
+        </>
+      )}
+      {err && <div className="t13 danger" style={{ marginTop: 8 }}>{err}</div>}
+      {results?.map((r) => (
+        <div key={r.model} className={`t13 ${r.ok ? 'secondary' : 'danger'}`} style={{ marginTop: 8 }}>
+          {r.ok ? `${r.model} 可以用，${r.seconds} 秒回答了「${r.answer}」。` : `${r.model}：${r.error}`}
+        </div>
+      ))}
+    </div>
   )
 }

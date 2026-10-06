@@ -3,6 +3,7 @@ import { enc, post, type Domain, type Item } from '../lib/api'
 import { DOMAINS } from '../lib/domains'
 import { Spinner } from './Icons'
 import StarRating, { StarsView } from './StarRating'
+import { models, shortName } from '../lib/models'
 
 export interface LogOut {
   item: Item
@@ -165,7 +166,7 @@ export default function LogPanel({
           {status === 'watched' ? `${c.finished}于` : '记于'}
           <input type="date" value={day} max={today()} onChange={(e) => setDay(e.target.value || today())} />
         </label>
-        {busy && text.trim() && <span className="t13 secondary">Spark 1.7B 正在本机整理你的话</span>}
+        {busy && text.trim() && <span className="t13 secondary">{shortName(models().small)} 正在{models().onDevice ? '本机' : ''}整理你的话</span>}
       </div>
     </div>
   )

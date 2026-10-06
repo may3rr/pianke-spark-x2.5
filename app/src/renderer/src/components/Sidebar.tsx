@@ -3,6 +3,7 @@ import type { Domain, Status } from '../lib/api'
 import { DOMAINS, DOMAIN_ORDER } from '../lib/domains'
 import { reltime } from '../lib/format'
 import { BookFillIcon, GearFillIcon, MoonFillIcon, MusicNoteFillIcon, SparklesFillIcon } from './Icons'
+import { modelDot, modelStatusLabel, shortName } from '../lib/models'
 
 export type View = Domain | 'profile' | 'settings'
 
@@ -103,13 +104,9 @@ export default function Sidebar({
         <div className="side-foot">
           {status.models.map((m) => (
             <div key={m.key} className="model-chip" title={m.error ?? undefined}>
-              <span
-                className={`status-dot ${m.status === 'ready' ? 'ready' : m.status === 'loading' ? 'loading' : m.status === 'stopped' ? '' : 'error'}`}
-              />
-              <span>{m.name.replace('Spark-X2.5-', 'Spark ')}</span>
-              <span style={{ marginLeft: 'auto' }}>
-                {m.status === 'ready' ? '本机' : m.status === 'loading' ? '加载中' : m.status === 'missing' ? '缺文件' : m.status === 'error' ? '出错' : '未启动'}
-              </span>
+              <span className={`status-dot ${modelDot(m)}`} />
+              <span className="truncate">{shortName(m.name)}</span>
+              <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{modelStatusLabel(m)}</span>
             </div>
           ))}
           <button

@@ -7,6 +7,7 @@ import Cover from '../components/Cover'
 import LogPanel from '../components/LogPanel'
 import StarRating, { StarsView } from '../components/StarRating'
 import { ChevronLeftIcon, GridIcon, ListIcon, PlusIcon, Spinner, XmarkIcon } from '../components/Icons'
+import { models, shortName } from '../lib/models'
 
 type Kind = 'want' | 'records'
 
@@ -400,7 +401,7 @@ function RecordPage({
         {saving === 'words' ? (
           <>
             <Spinner size={12} />
-            Spark 1.7B 正在本机重读你的评语
+            {shortName(models().small)} 正在{models().onDevice ? '本机' : ''}重读你的评语
           </>
         ) : saving === 'field' ? (
           '正在保存'

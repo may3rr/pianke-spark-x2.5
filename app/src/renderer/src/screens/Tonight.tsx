@@ -21,6 +21,7 @@ import CheckinCard from '../components/CheckinCard'
 import Cover from '../components/Cover'
 import LogPanel from '../components/LogPanel'
 import PassPanel from '../components/PassPanel'
+import { models } from '../lib/models'
 
 export function domainIcon(d: Domain, size: number) {
   return d === 'film' ? <MoonFillIcon size={size} /> : d === 'book' ? <BookFillIcon size={size} /> : <MusicNoteFillIcon size={size} />
@@ -203,7 +204,7 @@ function Compose({
           <div className="compose-actions">
             <span className="offline-note">
               <LockFillIcon size={13} />
-              你的话和记录只在这台 Mac 上，由本机模型处理
+              {models().onDevice ? '你的话和记录只在这台 Mac 上，由本机模型处理' : `你的话会发给 ${models().host} 上的模型处理，记录只存在这台 Mac 上`}
             </span>
             <button className="pill-accent" onClick={go} data-go>
               {c.pick3}
@@ -368,7 +369,9 @@ function Result({
         <div className="result-foot rise-in" style={{ animationDelay: '480ms' }}>
           <span className="offline-note">
             <CpuFillIcon size={14} />
-            由这台 Mac 上的 Spark-X2.5-4B 挑选，用时 {r.stats.seconds} 秒。你的记录没有离开这台 Mac。
+            {models().onDevice
+              ? `由这台 Mac 上的 ${models().big} 挑选，用时 ${r.stats.seconds} 秒。你的记录没有离开这台 Mac。`
+              : `由 ${models().host} 上的 ${models().big} 挑选，用时 ${r.stats.seconds} 秒。`}
           </span>
           <span className="flex" style={{ gap: 8 }}>
             <button className="pill-sm" onClick={newNight}>

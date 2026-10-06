@@ -8,6 +8,7 @@ import type { TonightState } from './screens/Tonight'
 import DomainView, { type Tab } from './screens/DomainView'
 import ProfilePage from './screens/ProfilePage'
 import Settings from './screens/Settings'
+import { syncModels } from './lib/models'
 
 export interface PastRec extends RecResult {
   id: number
@@ -31,7 +32,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await get<Status>('/status'))
+      const s = await get<Status>('/status')
+      syncModels(s)
+      setStatus(s)
     } catch {
       /* backend restarting; next poll */
     }

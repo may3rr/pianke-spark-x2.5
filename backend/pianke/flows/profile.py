@@ -10,6 +10,7 @@ import time
 from typing import Iterator
 
 from ..llm import client
+from ..llm.runtime import runtime
 from ..memory import store
 from . import memory_view
 
@@ -113,7 +114,7 @@ def consolidate(reason: str = "manual", think: bool = False) -> Iterator[dict]:
         "seconds": round(time.time() - t0, 1),
         "prompt_tps": stats.get("prompt_tps"),
         "gen_tps": stats.get("gen_tps"),
-        "model": "Spark-X2.5-4B",
+        "model": runtime.servers["big"].name,
         "diff": _diff(prev, doc),
     }
     version = store.save_profile(doc, pstats)

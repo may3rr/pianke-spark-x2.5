@@ -1595,3 +1595,7 @@
 .switch.on span {
   transform: translateX(16px);
 }
+
+label.field {
+  display: block;
+}

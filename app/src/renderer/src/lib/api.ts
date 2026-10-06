@@ -99,12 +99,29 @@ export interface Profile {
 export interface ModelState {
   key: 'big' | 'small'
   name: string
+  provider: 'local' | 'api'
+  host: string
   file: string
-  status: 'stopped' | 'loading' | 'ready' | 'missing' | 'error'
+  /** idle: local model not loaded yet, loads on first use */
+  status: 'stopped' | 'idle' | 'loading' | 'ready' | 'missing' | 'error'
   error: string | null
   ctx: number
   size_bytes: number | null
   load_seconds: number | null
+}
+
+/** Which models answer; the API key itself never leaves the backend. */
+export interface LlmSettings {
+  mode: 'local' | 'api'
+  base_url: string
+  big_model: string
+  small_model: string
+  ctx: number
+  has_key: boolean
+  key_hint: string
+  host: string
+  /** false when the user's words go to a server off this Mac */
+  on_device: boolean
 }
 
 export type Counts = Record<'watched' | 'dropped' | 'want' | 'rejected', number>
@@ -117,6 +134,7 @@ export interface PassReason {
 
 export interface Status {
   models: ModelState[]
+  llm: LlmSettings
   catalog: { available: boolean; total?: string; with_zh?: string; built_at?: string; source?: string; count_movie?: string; count_series?: string; count_miniseries?: string }
   library: { available: boolean; count_book?: string; count_album?: string; built_at?: string; source?: string }
   onboarded: boolean

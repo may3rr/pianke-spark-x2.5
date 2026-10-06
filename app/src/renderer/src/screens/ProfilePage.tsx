@@ -3,6 +3,7 @@ import { get, put, stream, type Claim, type Profile, type Status, type Title } f
 import { reltime } from '../lib/format'
 import { morph } from '../lib/vt'
 import { CheckDraw, PencilFillIcon, PlusIcon, SparklesFillIcon, Spinner, Tile, XmarkIcon } from '../components/Icons'
+import { models, shortName } from '../lib/models'
 
 interface Data {
   profile: Profile | null
@@ -160,7 +161,7 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
               <SparklesFillIcon size={15} />
             </span>
             <div style={{ flex: 1 }}>
-              有 {status.stale} 条新记录还没整理进画像。整理时，4B 模型会把全部记录完整读一遍。
+              有 {status.stale} 条新记录还没整理进画像。整理时，{shortName(models().big)} 会把全部记录完整读一遍。
             </div>
             <button className="link-accent t13" onClick={consolidate}>
               现在整理

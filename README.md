@@ -105,6 +105,14 @@ npm install
 PIANKE_PYTHON=$(which python) npm run dev
 ```
 
+两个本机模型在第一次用到时才加载，打开应用不占内存；设 `PIANKE_PRELOAD=1` 可以在启动时就加载。
+
+### 用 OpenAI 兼容接口代替本机模型
+
+内存不够或不想下载模型时，在「设置 → 模型」里切到「OpenAI 兼容接口」，填接口地址（一般以 `/v1` 结尾）、API Key 和模型名。OpenAI、DeepSeek、OpenRouter 和本机的 Ollama、LM Studio 都可以用，这时第 1 步的模型和 llama.cpp 都不需要。不同服务支持的参数不一样，片刻会根据接口返回的 400 错误自动去掉或改名不支持的参数，结构化输出从 `json_schema` 依次退到 `json_object` 和纯提示词。
+
+设置存在 `~/Library/Application Support/Pianke/llm.json`（权限 600），不在记忆文件里，清空记忆和导出都不会带上 API Key。用远程接口时，你的话、记录和口味画像会在聊天和推荐时发给那个服务，界面上的隐私说明会随之改变；接口在本机（localhost）时仍然算作不出这台 Mac。
+
 用户数据只存在 `~/Library/Application Support/Pianke/user.sqlite`。同目录下的 `cache.sqlite` 和 `covers/` 只放公开的作品信息和封面，可以随时删除。
 
 ## 实测（Apple M3 Pro，18GB，2026-10-05）
@@ -154,7 +162,7 @@ PIANKE_HOME=/tmp/pianke-demo PIANKE_DRIVE=scripts/drive/shelves.json PIANKE_SHOT
 
 ```
 backend/pianke/
-  llm/        llama-server 进程管理、带 JSON 语法约束的调用、每次调用的耗时记录
+  llm/        llama-server 进程管理（用时加载）、OpenAI 兼容接口、带 JSON 约束的调用、每次调用的耗时记录
   catalog/    片库（IMDb）、书库和曲库（Wikidata）：核实、条件检索、封面墙
   lookup/     唯一联网的地方：按作品名查书、专辑和封面，结果缓存在本机
   memory/     L0–L2 的 SQLite 存储

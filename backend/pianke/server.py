@@ -20,12 +20,14 @@ from sse_starlette.sse import EventSourceResponse
 
 from .catalog import library
 from .catalog import search as catalog
-from .config import BIG, USER_DB
+from .config import USER_DB
 from .domains import DOMAINS, PASS_REASONS, WORDS, reason_label
 from .flows import feedback as feedback_flow
 from .flows import interview as interview_flow
 from .flows import profile as profile_flow
 from .flows import recommend as rec_flow
+from .llm import client as llm_client
+from .llm import settings as llm_settings
 from .llm.runtime import runtime
 from .lookup import covers
 from .memory import store
@@ -99,8 +101,13 @@ def sse(gen_fn: Callable[[], Iterator[dict]]) -> EventSourceResponse:
 
 def _friendly(e: Exception) -> str:
     msg = str(e)
+    remote = runtime.servers["big"].remote
     if "ConnectError" in type(e).__name__ or "Connection refused" in msg:
+        if remote:
+            return f"连不上 {remote['host']}。检查接口地址和网络。"
         return "本机模型还没有准备好。稍等几秒再试一次。"
+    if "Timeout" in type(e).__name__ and remote:
+        return f"{remote['host']} 太久没有回应。稍后再试一次。"
     return msg or type(e).__name__
 
 
@@ -117,6 +124,7 @@ def status() -> dict:
     its = store.items()
     return {
         "models": runtime.public(),
+        "llm": llm_settings.public(llm_settings.load()),
         "catalog": catalog.stats(),
         "library": library.stats(),
         "onboarded": bool(store.get_pref("onboarded", False)),
@@ -155,7 +163,57 @@ def usage() -> dict:
             with open(p) as f:
                 bench = json.load(f)
             break
-    return {**store.llm_summary(), "bench": bench, "big_ctx": BIG.ctx}
+    return {**store.llm_summary(), "bench": bench, "big_ctx": runtime.servers["big"].ctx}
+
+
+# ---------------------------------------------------------------- models
+
+@app.get("/llm", dependencies=[Depends(auth)])
+def get_llm() -> dict:
+    return llm_settings.public(llm_settings.load())
+
+
+class LlmIn(BaseModel):
+    mode: str
+    base_url: str = ""
+    api_key: str | None = None  # None keeps the saved key
+    big_model: str = ""
+    small_model: str = ""
+    ctx: int = 131072
+
+
+@app.put("/llm", dependencies=[Depends(auth)])
+def put_llm(body: LlmIn) -> dict:
+    s = llm_settings.save(body.model_dump())
+    runtime.apply(s)
+    return llm_settings.public(s)
+
+
+@app.post("/llm/test", dependencies=[Depends(auth)])
+def test_llm() -> dict:
+    """One short structured call per distinct model, so a wrong key, URL or
+    model name shows up here rather than in the middle of a recommendation."""
+    out = []
+    seen = set()
+    for key in ("big", "small"):
+        name = runtime.servers[key].name
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            data, stats = llm_client.chat(
+                key,
+                [{"role": "user", "content": "用一个词回答：天空通常是什么颜色？"}],
+                task="connection_test",
+                schema={"type": "object", "properties": {"answer": {"type": "string"}},
+                        "required": ["answer"]},
+                max_tokens=64,
+                sampling={"temperature": 0.2},
+            )
+            out.append({"model": name, "ok": True, "answer": data["answer"], "seconds": stats["seconds"]})
+        except Exception as e:  # shown next to the form
+            out.append({"model": name, "ok": False, "error": _friendly(e)})
+    return {"results": out}
 
 
 class NameIn(BaseModel):

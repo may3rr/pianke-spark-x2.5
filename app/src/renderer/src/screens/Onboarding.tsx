@@ -17,6 +17,7 @@ import {
   Tile,
   WifiSlashFillIcon,
 } from '../components/Icons'
+import { modelDot, models, modelUsable } from '../lib/models'
 
 const TAGLINE = 'Fewer films, better nights.'
 
@@ -46,6 +47,8 @@ export default function Onboarding({ status, onDone }: { status: Status; onDone:
   const [domains, setDomains] = useState<Domain[]>([])
   const [wallIdx, setWallIdx] = useState(0)
   const lockRef = useRef<HTMLDivElement>(null)
+  const onDevice = status.llm?.on_device ?? true
+  const local = status.llm?.mode !== 'api'
 
   useEffect(() => {
     if (step !== 0 || shuffle) return
@@ -110,23 +113,37 @@ export default function Onboarding({ status, onDone }: { status: Status; onDone:
               <Tile size={40} color="var(--tile-indigo)" icon={<LockFillIcon size={22} />} />
             </div>
             <h1 className="t26 onboard-h" style={{ textAlign: 'center' }}>
-              你的口味只留在这台 Mac 上
+              {onDevice ? '你的口味只留在这台 Mac 上' : '你的记录只存在这台 Mac 上'}
             </h1>
             <p className="secondary onboard-sub" style={{ textAlign: 'center' }}>
-              片刻会记住你说过的每一句话，所以它不能住在别人的服务器上。
+              {onDevice
+                ? '片刻会记住你说过的每一句话，所以它不能住在别人的服务器上。'
+                : `你在设置里选了 ${status.llm.host} 上的模型，聊天和推荐时你的话会发给它。记录和画像仍只存在本机。`}
             </p>
             <div className="local-rows">
               <div className="local-row">
                 <Tile color="var(--tile-blue)" icon={<CpuFillIcon size={13} />} />
                 <div className="min-w-0" style={{ flex: 1 }}>
-                  <div className="font-semibold">两个模型在本机运行</div>
-                  <div className="t13 secondary">Spark-X2.5-4B 负责理解你和挑片，1.7B 负责整理你说的话。</div>
+                  <div className="font-semibold">{local ? '两个模型在本机运行' : '模型通过 OpenAI 兼容接口调用'}</div>
+                  <div className="t13 secondary">
+                    {local
+                      ? 'Spark-X2.5-4B 负责理解你和挑片，1.7B 负责整理你说的话。用到时才加载，不用时不占内存。'
+                      : `${status.models[0]?.name} 负责理解你和挑片，${status.models[1]?.name} 负责整理你说的话。`}
+                  </div>
                   {status.models.map((m) => (
                     <div key={m.key} className="model-line">
-                      <span className={`status-dot ${m.status === 'ready' ? 'ready' : m.status === 'loading' ? 'loading' : m.status === 'stopped' ? '' : 'error'}`} />
+                      <span className={`status-dot ${modelDot(m)}`} />
                       {m.name}
                       <span style={{ marginLeft: 'auto' }}>
-                        {m.status === 'ready' ? `已就绪${m.load_seconds ? `，加载用了 ${m.load_seconds} 秒` : ''}` : m.status === 'loading' ? '正在加载' : m.error ?? '未启动'}
+                        {m.status === 'ready'
+                          ? m.provider === 'api'
+                            ? m.host
+                            : `已就绪${m.load_seconds ? `，加载用了 ${m.load_seconds} 秒` : ''}`
+                          : m.status === 'idle'
+                            ? '用到时加载'
+                            : m.status === 'loading'
+                              ? '正在加载'
+                              : m.error ?? '未启动'}
                       </span>
                     </div>
                   ))}
@@ -150,7 +167,7 @@ export default function Onboarding({ status, onDone }: { status: Status; onDone:
               <div className="local-row">
                 <Tile color="var(--tile-purple)" icon={<WifiSlashFillIcon size={13} />} />
                 <div>
-                  <div className="font-semibold">没有账号，你的话不出这台 Mac</div>
+                  <div className="font-semibold">{onDevice ? '没有账号，你的话不出这台 Mac' : '没有账号，作品查询不带你的信息'}</div>
                   <div className="t13 secondary">
                     联网只做两件事：按作品名查封面，按书名、专辑名核实作品是否存在。请求里只有作品名，没有任何关于你的信息。
                   </div>
@@ -163,11 +180,11 @@ export default function Onboarding({ status, onDone }: { status: Status; onDone:
               </button>
               <button
                 className="pill-accent"
-                disabled={!status.models.every((m) => m.status === 'ready')}
+                disabled={!status.models.every(modelUsable)}
                 onClick={() => setStep(2)}
                 data-ob-next
               >
-                {status.models.every((m) => m.status === 'ready') ? '继续' : '等模型加载'}
+                {status.models.every(modelUsable) ? '继续' : local ? '等模型加载' : '先在设置里配好接口'}
               </button>
             </div>
           </div>
@@ -459,7 +476,7 @@ export function Build({ onDone, leaving, doneLabel = '开始' }: { onDone: () =>
       <div className="onboard-panel" style={{ width: 560, textAlign: 'center' }}>
         <h1 className="t26 onboard-h">{profile ? '这是我对你的第一印象' : '正在整理你的口味'}</h1>
         <p className="secondary onboard-sub">
-          {profile ? '以后每看完、读完、听完一部，打个分、说一句感受，它都会更准。你也可以随时去改。' : '在这台 Mac 上运行，你说的话不会离开它。'}
+          {profile ? '以后每看完、读完、听完一部，打个分、说一句感受，它都会更准。你也可以随时去改。' : models().onDevice ? '在这台 Mac 上运行，你说的话不会离开它。' : '整理好的画像只存在这台 Mac 上。'}
         </p>
         <div className="build-titles">
           {titles.map((t, i) => (
