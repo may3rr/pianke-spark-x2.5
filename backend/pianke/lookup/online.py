@@ -310,3 +310,106 @@ def netease_cover(title: str, artist: str | None) -> str | None:
         if r.get("picUrl"):
             return r["picUrl"].replace("http://", "https://") + "?param=600y600"
     return None
+
+
+# ---------------------------------------------------------------- films
+
+TMDB_SEARCH = "https://api.themoviedb.org/3/search/multi"
+TMDB_EXTERNAL = "https://api.themoviedb.org/3/{kind}/{id}/external_ids"
+
+
+def _film(id_: str, kind: str, zh: str | None, title: str, original: str, year: int | None,
+          ext: dict) -> dict:
+    """A film found online, in the catalog's row shape."""
+    return {
+        "id": id_, "domain": "film", "kind": kind, "title": title or zh or "", "original": original or title,
+        "zh": zh, "name": zh or title, "year": year, "end_year": None, "runtime": None,
+        "genres": [], "genres_zh": [], "rating": None, "votes": 0, "directors": [], "cast": [],
+        "ext": ext,
+    }
+
+
+def _film_score(q: str, names: list[str], year: int | None, y: int | None) -> float:
+    sim = max((fuzz.ratio(_norm(q), _norm(n)) for n in names if n), default=0) / 100
+    if year and y:
+        # remakes share titles: more than two years apart is another film
+        d = abs(year - y)
+        sim += 0.1 if d <= 1 else -0.05 if d == 2 else -0.5
+    return sim
+
+
+def tmdb_search_films(q: str, lane: str = "bg") -> list[dict]:
+    """TMDB multi-search in Chinese; each hit carries its IMDb id when TMDB
+    knows it, so it can be matched back to the local catalog."""
+    auth = _tmdb_auth()
+    if not auth or not q.strip():
+        return []
+    data = net.get_json(TMDB_SEARCH, {"query": q, "language": "zh-CN", "include_adult": "false"},
+                        lane=lane, **auth)
+    out = []
+    for r in ((data or {}).get("results") or [])[:6]:
+        kind = {"movie": "movie", "tv": "series"}.get(r.get("media_type"))
+        if not kind:
+            continue
+        ids = net.get_json(TMDB_EXTERNAL.format(kind="movie" if kind == "movie" else "tv", id=r["id"]),
+                           {}, lane=lane, **auth) or {}
+        zh = r.get("title") or r.get("name") or ""
+        orig = r.get("original_title") or r.get("original_name") or ""
+        poster = f"{TMDB_IMG}{r['poster_path']}" if r.get("poster_path") else ""
+        out.append(_film(
+            ids.get("imdb_id") or f"fm:tmdb{r['id']}", kind,
+            zh if re.search(r"[一-鿿]", zh) else None, zh, orig,
+            _year(r.get("release_date") or r.get("first_air_date")),
+            {"tmdb": r["id"], "cover": poster, "summary": (r.get("overview") or "")[:300]},
+        ))
+    return out
+
+
+def douban_search_films(q: str, lane: str = "bg") -> list[dict]:
+    """Douban's suggest box: the best coverage of Chinese titles, no ids
+    shared with IMDb, so finds become fm:db… records."""
+    out = []
+    for r in douban("movie", q, lane):
+        if not r.get("id") or r.get("type") not in (None, "movie"):
+            continue
+        title = r.get("title") or ""
+        out.append(_film(
+            f"fm:db{r['id']}", "series" if r.get("episode") else "movie",
+            title if re.search(r"[一-鿿]", title) else None, title,
+            r.get("sub_title") or title, _year(r.get("year")),
+            {"douban": r["id"], "cover": (r.get("img") or "").replace("s_ratio_poster", "m_ratio_poster")},
+        ))
+    return out
+
+
+def find_film(title: str, original: str | None = None, year: int | None = None,
+              local=None) -> dict | None:
+    """A film the local catalog doesn't have: TMDB (when the user set a key),
+    then Douban. `local(imdb_id)` maps a TMDB hit back to the catalog row so
+    the rest of the app keeps using IMDb ids where it can."""
+    for search in (tmdb_search_films, douban_search_films):
+        best: tuple[float, dict] | None = None
+        for q in dict.fromkeys(x for x in (title, original) if x):
+            for f in search(q):
+                score = _film_score(q, [f["zh"] or "", f["title"], f["original"]], year, f["year"])
+                if score >= 0.8 and (best is None or score > best[0]):
+                    best = (score, f)
+            if best:
+                break
+        if best:
+            f = best[1]
+            if local and f["id"].startswith("tt"):
+                hit = local(f["id"])
+                if hit:
+                    return hit
+            net.save_ext(f["id"], "film", f)
+            return f
+    return None
+
+
+def search_films(q: str, lane: str = "fg") -> list[dict]:
+    """Films for the search box when the catalog has few matches."""
+    out = tmdb_search_films(q, lane) or douban_search_films(q, lane)
+    for f in out:
+        net.save_ext(f["id"], "film", f)
+    return out

@@ -164,7 +164,7 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     exclude = seen | store.recently_recommended()
     verified: list[dict] = []
     for s in seeds:
-        hit = catalog.resolve(s["title"], s["year"] or None, s["original"] or None)
+        hit = catalog.resolve(s["title"], s["year"] or None, s["original"] or None, use_online=True)
         ok = hit is not None and hit["id"] not in exclude
         yield {
             "type": "seed",

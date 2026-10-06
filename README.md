@@ -71,7 +71,7 @@
 
 | 书架 | 本地库（筛候选、封面墙） | 库里没有时联网核实 | 封面 |
 | --- | --- | --- | --- |
-| 影视 | IMDb 非商业数据集，3 万多部 | 不需要 | 豆瓣，维基百科（按 IMDb 编号） |
+| 影视 | IMDb 非商业数据集，4.6 万部，其中 3.2 万部有中文名 | TMDB（填了 Key 时），豆瓣 | TMDB（按 IMDb 编号），豆瓣，维基百科 |
 | 书 | Wikidata（CC0）里的知名作品，含中文作品 | 豆瓣读书，iTunes Books | 豆瓣，维基百科，Open Library |
 | 音乐（以专辑为单位） | Wikidata 里的知名专辑，含华语、日韩 | iTunes | 维基百科，Cover Art Archive，iTunes |
 
@@ -88,7 +88,8 @@ curl -LO https://huggingface.co/XHToken/Spark-X2.5-4B-GGUF/resolve/main/Spark-X2
 curl -LO https://huggingface.co/XHToken/Spark-X2.5-1.7B-GGUF/resolve/main/Spark-X2.5-1.7B-Q4_K_M.gguf
 cd ..
 
-# 2. 片库（下载 IMDb 非商业数据集约 1.9 GB，生成 29 MB 的 data/catalog.sqlite）
+# 2. 片库（下载 IMDb 非商业数据集约 1.9 GB，生成 43 MB 的 data/catalog.sqlite）
+#    评分人数 3000 以上的都收；有中文译名的放宽到 300，华语片在 IMDb 上评分的人少
 #    书库和曲库（从 Wikidata 拉取，生成 data/library.sqlite；没有它也能用，书和音乐只靠联网核实）
 mkdir -p data/raw && cd data/raw
 for f in title.basics title.ratings title.akas title.crew title.principals name.basics; do

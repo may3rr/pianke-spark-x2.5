@@ -2,7 +2,11 @@
 
 Two jobs: resolve a title the user or the model mentioned to a real catalog
 row (so nothing invented ever reaches the screen), and pull candidates by
-structured filters for the model to choose from."""
+structured filters for the model to choose from.
+
+A title the catalog lacks can be looked up online (use_online): TMDB, then
+Douban. Finds are kept as ext records (tt… when TMDB knows the IMDb id,
+fm:tmdb… / fm:db… otherwise) and read back by get()."""
 
 from __future__ import annotations
 
@@ -43,6 +47,19 @@ def _con() -> sqlite3.Connection:
 
 def available() -> bool:
     return CATALOG_DB.exists()
+
+
+@lru_cache(maxsize=1)
+def _has_aliases() -> bool:
+    """Catalogs built before Chinese aliases were kept lack the column."""
+    return "aliases" in {c[1] for c in _con().execute("pragma table_info(titles)")}
+
+
+def _names(r: sqlite3.Row) -> list[str]:
+    """Every name a row answers to, normalised: Chinese title and aliases,
+    English and original titles."""
+    extra = (r["aliases"] or "").split("|") if _has_aliases() else []
+    return [n for n in (_norm(x) for x in (r["zh"] or "", r["title"], r["original"], *extra)) if n]
 
 
 def _row(r: sqlite3.Row) -> dict:
@@ -87,6 +104,11 @@ def get_many(ids: list[str]) -> list[dict]:
         q = ",".join("?" * len(films))
         rows = _con().execute(f"select * from titles where id in ({q})", films).fetchall()
         by = {r["id"]: _row(r) for r in rows}
+        missing = [i for i in films if i not in by]
+        if missing:  # found online (see find_film)
+            from ..lookup import net
+
+            by.update(net.load_ext(missing))
     others = [i for i in ids if i not in by and domain_of(i) != "film"]
     if others:
         from . import library
@@ -125,25 +147,37 @@ def _candidates(q: str) -> tuple[sqlite3.Row, ...]:
             rows = []
     if not rows:
         like = f"%{q}%"
+        alias = " or aliases like ?" if _has_aliases() else ""
         rows = c.execute(
-            "select * from titles where zh like ? or title like ? or original like ?"
+            f"select * from titles where zh like ? or title like ? or original like ?{alias}"
             " order by votes desc limit 60",
-            (like, like, like),
+            (like, like, like, *([like] if alias else [])),
         ).fetchall()
     return tuple(rows)
 
 
-def resolve(title: str, year: int | None = None, original: str | None = None) -> dict | None:
+def resolve(title: str, year: int | None = None, original: str | None = None, *,
+            use_online: bool = False) -> dict | None:
     """Best catalog match for a free-form title, or None if nothing is
-    close enough. Score = string similarity + year agreement + popularity."""
+    close enough. Score = string similarity + year agreement + popularity.
+    use_online: when the catalog has no match, try TMDB and Douban."""
+    hit = _resolve_local(title, year, original)
+    if hit or not use_online:
+        return hit
+    from ..lookup import online
+
+    return online.find_film(title, original, year, local=get)
+
+
+def _resolve_local(title: str, year: int | None, original: str | None) -> dict | None:
     queries = [q for q in {_norm(title), _norm(original or "")} if q]
     best: tuple[float, sqlite3.Row] | None = None
     for q in queries:
         for r in _candidates(q):
-            names = [_norm(r["zh"] or ""), _norm(r["title"]), _norm(r["original"])]
-            sim = max(fuzz.ratio(q, n) for n in names if n) / 100
+            names = _names(r)
+            sim = max(fuzz.ratio(q, n) for n in names) / 100
             # "小森林" for "小森林 夏秋篇": a whole-word prefix counts as close
-            if any(n.startswith(q + " ") for n in names if n) and len(q) >= 2:
+            if any(n.startswith(q + " ") for n in names) and len(q) >= 2:
                 sim = max(sim, 0.88)
             if sim < 0.6:
                 continue
@@ -161,18 +195,32 @@ def resolve(title: str, year: int | None = None, original: str | None = None) ->
     return out
 
 
-def search(q: str, limit: int = 12) -> list[dict]:
-    q = _norm(q)
+def search(q: str, limit: int = 12, *, use_online: bool = False) -> list[dict]:
+    raw, q = q, _norm(q)
     if not q:
         return []
     rows = list(_candidates(q))
     scored = []
     for r in rows:
-        names = [_norm(r["zh"] or ""), _norm(r["title"]), _norm(r["original"])]
-        sim = max(fuzz.partial_ratio(q, n) for n in names if n) / 100
+        sim = max(fuzz.partial_ratio(q, n) for n in _names(r)) / 100
         scored.append((sim + 0.05 * math.log10(max(r["votes"], 10)), r))
     scored.sort(key=lambda x: -x[0])
-    return [_row(r) for _, r in scored[:limit]]
+    out = [_row(r) for _, r in scored[:limit]]
+    exact = any(q in _names(r) for _, r in scored[:limit])
+    if use_online and len(out) < 5 and not exact:
+        from ..lookup import online
+
+        have = {t["id"] for t in out}
+        names = {_norm(t["name"]) for t in out}
+        for f in online.search_films(raw):
+            # a Douban hit may well be in the catalog under its IMDb id
+            local = get(f["id"]) if f["id"].startswith("tt") else _resolve_local(f["name"], f["year"], f["original"])
+            t = local or f
+            if t["id"] in have or _norm(t["name"]) in names:
+                continue
+            have.add(t["id"])
+            out.append(t)
+    return out[:limit]
 
 
 # ---------------------------------------------------------------- filter
@@ -298,7 +346,7 @@ def brief(t: dict) -> str:
         parts.append(t["original"])
     span = str(t["year"] or "")
     if t["kind"] != "movie":
-        span += f"–{t['end_year'] or ''} {KIND_ZH[t['kind']]}"
+        span += f"–{t['end_year'] or ''} {KIND_ZH.get(t['kind'], '')}"
     parts.append(span)
     if t["runtime"]:
         parts.append(f"{t['runtime']}分钟")
@@ -307,5 +355,6 @@ def brief(t: dict) -> str:
         parts.append("导演 " + "、".join(t["directors"][:2]))
     if t["cast"]:
         parts.append("主演 " + "、".join(t["cast"][:3]))
-    parts.append(f"IMDb {t['rating']}")
+    if t["rating"]:
+        parts.append(f"IMDb {t['rating']}")
     return " | ".join(p for p in parts if p)

@@ -461,7 +461,7 @@ def item_delete(item_id: str) -> dict:
 @app.get("/search", dependencies=[Depends(auth)])
 def search(q: str, domain: str = "film") -> list[dict]:
     if domain == "film":
-        return catalog.search(q)
+        return catalog.search(q, use_online=True)
     return library.search(domain, q)
 
 

@@ -245,7 +245,7 @@ EXTRACT_SYSTEM = """把用户在访谈里说的话整理成结构化数据。
 
 def _resolve(t: dict) -> dict | None:
     if t["domain"] == "film":
-        return catalog.resolve(t["title"], t["year"] or None, t["original"] or None)
+        return catalog.resolve(t["title"], t["year"] or None, t["original"] or None, use_online=True)
     return library.resolve(t["domain"], t["title"], t["creator"] or None, t["year"] or None,
                            t["original"] or None)
 
