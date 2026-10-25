@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -19,7 +20,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from ..config import EXTERNAL_LLM, LLAMA_SERVER, MODELS, MODELS_DIR, ModelSpec
+from ..config import EXTERNAL_LLM, HOME, LLAMA_SERVER, MODELS, MODELS_DIR, ModelSpec
 from . import settings as llm_settings
 
 
@@ -135,10 +136,24 @@ class Runtime:
             st.error = f"没有找到模型文件 {path}"
             return False
         binary = shutil.which(LLAMA_SERVER) or LLAMA_SERVER
-        if self._healthy(st):  # a previous run left it up — reuse
-            st.status = "ready"
-            st.started_at = st.ready_at = time.time()
-            return False
+        who = self._who_listens(st)
+        if self._healthy(st):
+            if who in ("ours", "unknown"):
+                # a previous run left it up (or something intentionally
+                # shares the port) — reuse it
+                st.status = "ready"
+                st.started_at = st.ready_at = time.time()
+                return False
+            if who == "ours-stale":
+                # our leftover, but serving different weights: it's ours
+                # (pid file under our HOME), so put it down and start fresh
+                self._kill_pid_file(st)
+            else:  # a stranger holds our port; don't adopt, don't kill
+                st.status = "error"
+                st.error = f"端口 {st.spec.port} 被其他程序占用，模型没法启动。关掉那个程序再试。"
+                return False
+        elif who in ("ours", "ours-stale"):
+            self._kill_pid_file(st)  # our leftover hung without listening
         args = [
             binary,
             "-m", str(path),
@@ -164,12 +179,58 @@ class Runtime:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
+                # its own process group: a group kill can never miss it, and
+                # it never receives signals meant for the backend
+                process_group=0,
             )
         except OSError as e:
             st.status = "error"
             st.error = f"无法启动 llama-server：{e}"
             return False
+        try:
+            (HOME / f"llama-{st.spec.port}.pid").write_text(str(st.proc.pid))
+        except OSError:
+            pass
         return True
+
+    def _who_listens(self, st: ServerState) -> str:
+        """Classify the process the pid file points at: ours (our
+        llama-server on the right weights), ours-stale (ours, other weights),
+        stranger, or unknown (no/stale pid file)."""
+        try:
+            pid = int((HOME / f"llama-{st.spec.port}.pid").read_text().strip())
+        except (OSError, ValueError):
+            return "unknown"
+        try:
+            r = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "command="],
+                capture_output=True, text=True, timeout=5,
+            )
+            cmd = r.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return "unknown"
+        if not cmd:
+            return "unknown"
+        if "llama-server" not in cmd:
+            return "stranger"
+        if f"--port {st.spec.port}" not in cmd:
+            # the pid was recycled by some other llama-server (the user's
+            # own, on another port): not ours, never kill it
+            return "unknown"
+        return "ours" if st.spec.file in cmd else "ours-stale"
+
+    def _kill_pid_file(self, st: ServerState) -> None:
+        try:
+            pid = int((HOME / f"llama-{st.spec.port}.pid").read_text().strip())
+            os.kill(pid, signal.SIGTERM)
+        except (OSError, ValueError):
+            return
+        for _ in range(10):  # let the port actually free up
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return
+            time.sleep(0.5)
 
     def _healthy(self, st: ServerState) -> bool:
         try:
@@ -213,9 +274,30 @@ class Runtime:
             try:
                 st.proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                st.proc.kill()
+                try:
+                    os.killpg(os.getpgid(st.proc.pid), signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    try:
+                        st.proc.kill()
+                    except OSError:
+                        pass
         st.proc = None
         st.status = "stopped"
+
+    def watch_parent(self) -> None:
+        """Die with the app: if Electron goes away without stopping us (force
+        quit, crash), our parent pid changes and we shut the models down and
+        leave, instead of turning into an orphan holding several GB."""
+        ppid = os.getppid()
+
+        def run() -> None:
+            while True:
+                time.sleep(2)
+                if os.getppid() != ppid:
+                    self.stop_all()
+                    os._exit(0)
+
+        threading.Thread(target=run, daemon=True, name="parent-watch").start()
 
     # ------------------------------------------------------------ queries
 

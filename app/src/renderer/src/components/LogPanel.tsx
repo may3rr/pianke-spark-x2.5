@@ -4,6 +4,7 @@ import { DOMAINS } from '../lib/domains'
 import { Spinner } from './Icons'
 import StarRating, { StarsView } from './StarRating'
 import { models, shortName } from '../lib/models'
+import { useDemo } from '../lib/demo'
 
 export interface LogOut {
   item: Item
@@ -55,6 +56,7 @@ export default function LogPanel({
   const [busy, setBusy] = useState(false)
   const [out, setOut] = useState<LogOut | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const demo = useDemo()
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     ref.current?.focus({ preventScroll: true })
@@ -166,7 +168,11 @@ export default function LogPanel({
           {status === 'watched' ? `${c.finished}于` : '记于'}
           <input type="date" value={day} max={today()} onChange={(e) => setDay(e.target.value || today())} />
         </label>
-        {busy && text.trim() && <span className="t13 secondary">{shortName(models().small)} 正在{models().onDevice ? '本机' : ''}整理你的话</span>}
+        {busy && text.trim() && (
+          <span className="t13 secondary">
+            {demo ? `${shortName(models().small)} 正在${models().onDevice ? '本机' : ''}整理你的话` : '正在整理你的话'}
+          </span>
+        )}
       </div>
     </div>
   )

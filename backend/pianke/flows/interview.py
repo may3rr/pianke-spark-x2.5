@@ -160,9 +160,16 @@ def state() -> dict:
     }
 
 
+def talked() -> bool:
+    """Whether the user has had the full talk (habits, things to avoid).
+    The first run now ends at the cover wall; the talk is offered later.
+    People set up before that had it during onboarding."""
+    return bool(store.get_pref("talked", store.get_pref("onboarded", False)))
+
+
 def start(domains: list[str] | None = None) -> dict:
     domains = [d for d in (domains or ["film"]) if d in WORDS] or ["film"]
-    first_run = not store.get_pref("onboarded", False)
+    first_run = not talked()
     qs = _plan(domains, first_run)
     store.set_pref("interview_plan", {"domains": domains, "questions": qs, "first_run": first_run})
     store.clear_interview()
@@ -252,7 +259,26 @@ def _resolve(t: dict) -> dict | None:
 
 def finish() -> Iterator[dict]:
     """Extract → resolve (films locally; books and albums on the shelf, then
-    online by title) → seed L1 → build L2."""
+    online by title) → seed L1 → build L2. The model steps are best-effort:
+    if one fails onboarding still counts as done, so a missing or broken
+    model can't trap the user in the flow — the profile can be built later
+    from the profile page. The error itself propagates, so server.sse words
+    it for the UI ("本机模型还没有准备好…") instead of showing a raw one."""
+    plan = store.get_pref("interview_plan", {})
+    domains = plan.get("domains", ["film"])
+    if not store.get_pref("onboarded", False) and "talked" not in _prefs_set():
+        store.set_pref("talked", False)
+    if any(t["role"] == "user" for t in store.turns()) and plan.get("first_run"):
+        store.set_pref("talked", True)
+    try:
+        yield from _finish_steps()
+    finally:
+        store.set_pref("onboarded", True)
+        store.set_pref("domains_onboarded", sorted(set(onboarded_domains()) | set(domains)))
+    yield {"type": "complete"}
+
+
+def _finish_steps() -> Iterator[dict]:
     plan = store.get_pref("interview_plan", {})
     domains = plan.get("domains", ["film"])
     turns = store.turns()
@@ -265,9 +291,12 @@ def finish() -> Iterator[dict]:
         f"《{wall_ts[i]['name']}》（{WORDS[wall_ts[i].get('domain', 'film')]['label']}，{'喜欢' if m == 'love' else '不喜欢'}）"
         for i, m in marked if i in wall_ts
     )
+    # a question nobody answered (onboarding now can end at the wall) is noise
+    answered = [t for i, t in enumerate(turns)
+                if t["role"] == "user" or any(u["role"] == "user" for u in turns[i + 1:])]
     transcript = (
         (f"封面墙上点过：{wall_txt}\n\n" if wall_txt else "")
-        + "\n".join(f"{'问' if t['role'] == 'assistant' else '答'}：{t['text']}" for t in turns)
+        + "\n".join(f"{'问' if t['role'] == 'assistant' else '答'}：{t['text']}" for t in answered)
     )
     yield {"type": "step", "key": "extract", "status": "running"}
     data, stats = client.chat(
@@ -326,9 +355,6 @@ def finish() -> Iterator[dict]:
            "detail": f"核实了 {len(found) + len(marked)} 部" + (f"，{len(missing)} 部没找到" if missing else "")}
 
     yield from profile_flow.consolidate(reason="interview")
-    store.set_pref("onboarded", True)
-    store.set_pref("domains_onboarded", sorted(set(onboarded_domains()) | set(domains)))
-    yield {"type": "complete"}
 
 
 def onboarded_domains() -> list[str]:
@@ -336,3 +362,8 @@ def onboarded_domains() -> list[str]:
     if got is None:  # set up before books and music existed: films only
         return ["film"] if store.get_pref("onboarded", False) else []
     return got
+
+
+def _prefs_set() -> set[str]:
+    with store.db() as c:
+        return {r["key"] for r in c.execute("select key from prefs")}

@@ -61,10 +61,14 @@ export interface Quote {
 export interface Pick extends Title {
   reason: string
   because: Quote[]
+  /** the user had saved it to their list before this recommendation */
+  on_list?: boolean
 }
 
 export interface RecResult {
   rec_id: number | null
+  /** the pick the user pressed 就看这部 on */
+  chosen?: string | null
   domain?: Domain
   direction: string
   picks: Pick[]
@@ -92,7 +96,8 @@ export interface Profile {
     seconds?: number
     prompt_tps?: number
     gen_tps?: number
-    diff?: { added: number; removed: number; kept: number }
+    model?: string
+    diff?: { added: number; removed: number; kept: number; added_texts?: string[] }
   }
 }
 
@@ -150,6 +155,12 @@ export interface Status {
   counts: Counts
   profile_version: number | null
   stale: number
+  /** background consolidation is running */
+  profile_auto: boolean
+  /** a profile rewritten in the background the user hasn't opened yet */
+  profile_unseen: boolean
+  /** had the full talk (habits, things to avoid); first runs end at the wall */
+  talked: boolean
   data_path: string
 }
 

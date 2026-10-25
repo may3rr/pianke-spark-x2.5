@@ -114,7 +114,9 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     # ------------------------------------------------------------- read
     yield _sse_step("read", "running")
     prof = store.profile()
-    seen = {i["id"] for i in store.items(domain="film")}
+    seen, want_ids = _split_seen("film")
+    wanted = catalog.get_many(want_ids)
+    from_list = bool(request.get("from_list")) and len(wanted) >= 3
     if mode == "none":
         memory_block = "（不读取用户记忆）"
         n_records = 0
@@ -137,6 +139,7 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
         f"明确不想看：{'、'.join(avoid) or '（未说明）'}\n"
         f"看片习惯：{habits.get('when') or '未说明'} {habits.get('with') or ''}\n\n"
         f"## 今晚\n{tonight}"
+        + ("（这次只从用户自己的片单里挑）" if from_list else "")
     )
     yield _sse_step(
         "read", "done",
@@ -159,8 +162,8 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
 
     # ------------------------------------------------------------- search
     yield _sse_step("search", "running")
-    web_seeds, web_note = _web_seeds("film", DIRECTION_SCHEMA, d, context)
-    seeds = d["seeds"] + web_seeds
+    web_seeds, web_note = ([], "") if from_list else _web_seeds("film", DIRECTION_SCHEMA, d, context)
+    seeds = [] if from_list else d["seeds"] + web_seeds
     exclude = seen | store.recently_recommended()
     verified: list[dict] = []
     for s in seeds:
@@ -184,20 +187,24 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
         runtime_max=d["runtime_max"] or None,
         exclude=exclude | {v["id"] for v in verified},
     )
-    pool = catalog.candidates(**filt, limit=30)
     relaxed = []
-    for drop in ("genres_any", "year_min", "year_max", "runtime_max"):
-        if len(pool) >= 12:
-            break
-        filt[drop] = None
-        relaxed.append(drop)
+    if from_list:
+        pool = wanted[:36]
+        detail = f"从你的片单里挑，一共 {len(pool)} 部"
+    else:
         pool = catalog.candidates(**filt, limit=30)
-    pool = (verified + pool)[:36]
-    yield _sse_step(
-        "search", "done",
-        detail=f"模型想到 {len(d['seeds'])} 部{web_note}，片库核实 {len(verified)} 部；按条件再找 {len(pool) - len(verified)} 部",
-        pool=len(pool),
-    )
+        for drop in ("genres_any", "year_min", "year_max", "runtime_max"):
+            if len(pool) >= 12:
+                break
+            filt[drop] = None
+            relaxed.append(drop)
+            pool = catalog.candidates(**filt, limit=30)
+        listed = _listed(wanted, verified, pool)
+        pool = (verified + listed + _without(pool, listed))[:36]
+        detail = (f"模型想到 {len(d['seeds'])} 部{web_note}，片库核实 {len(verified)} 部；"
+                  f"按条件再找 {len(pool) - len(verified) - len(listed)} 部"
+                  + (f"，加上片单里的 {len(listed)} 部" if listed else ""))
+    yield _sse_step("search", "done", detail=detail, pool=len(pool))
     if len(pool) < 3:
         yield {"type": "error", "message": "片库里没有找到足够的候选。换个说法再试一次。"}
         return
@@ -209,7 +216,7 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     rel_ids = [r["id"] for r in rel]
     rel_titles = {t["id"]: t for t in catalog.get_many(rel_ids)}
     rel_block = "\n".join(memory_view.record_line(r, rel_titles.get(r["id"])) for r in rel) if mode == "layered" else ""
-    pool_block = "\n".join(catalog.brief(t) for t in pool)
+    pool_block = "\n".join(catalog.brief(t) + _list_mark(t, want_ids) for t in pool)
     pick_schema = {
         "type": "object",
         "properties": {
@@ -243,7 +250,8 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
     )
     out, st2 = client.chat(
         "big",
-        [{"role": "system", "content": PICK_SYSTEM}, {"role": "user", "content": pick_prompt}],
+        [{"role": "system", "content": PICK_SYSTEM + _list_note("film", pool, want_ids)},
+         {"role": "user", "content": pick_prompt}],
         task="rec_pick",
         schema=pick_schema,
         max_tokens=900,
@@ -267,6 +275,8 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
         if t["id"] not in used:
             used.add(t["id"])
             picks.append(_present(t, {"reason": "", "because": []}, rel_titles))
+    for p in picks:
+        p["on_list"] = p["id"] in want_ids
     reviewed = 0
     if web.enabled():
         yield _sse_step("pick", "running", detail="读网上的评价")
@@ -283,9 +293,11 @@ def run(request: dict, mode: str = "layered") -> Iterator[dict]:
         "verified": len(verified),
         "relaxed": relaxed,
     }
+    # yield before saving: a run cancelled during the last model call stops
+    # here (server.sse closes the generator) and leaves no history entry
+    yield _sse_step("pick", "done", detail=f"用时 {stats['seconds']} 秒")
     rec_id = store.save_rec(request, d["direction"], picks, stats) if mode == "layered" else None
     store.event("rec", {"rec_id": rec_id, "request": request, "picks": [p["id"] for p in picks]})
-    yield _sse_step("pick", "done", detail=f"用时 {stats['seconds']} 秒")
     yield {"type": "result", "rec_id": rec_id, "direction": d["direction"], "picks": picks, "stats": stats,
            "domain": "film"}
 
@@ -310,6 +322,39 @@ def _present(t: dict, p: dict, rel_titles: dict) -> dict:
             "rating": it["rating"],
         })
     return {**t, "reason": p.get("reason", "").strip().replace("您", "你"), "because": quotes}
+
+
+# ================================================================ the list
+
+def _split_seen(domain: str) -> tuple[set[str], list[str]]:
+    """What not to pick again, and the user's list (newest first). Works on
+    the list are candidates, not exclusions: the user saved them to get to."""
+    its = store.items(domain=domain)
+    seen = {i["id"] for i in its if i["status"] != "want"}
+    want = [i["id"] for i in sorted(its, key=lambda i: -i["updated"]) if i["status"] == "want"]
+    return seen, want
+
+
+def _listed(wanted: list[dict], verified: list[dict], pool: list[dict], n: int = 8) -> list[dict]:
+    have = {t["id"] for t in verified}
+    return [t for t in wanted[:n] if t["id"] not in have]
+
+
+def _without(pool: list[dict], drop: list[dict]) -> list[dict]:
+    ids = {t["id"] for t in drop}
+    return [t for t in pool if t["id"] not in ids]
+
+
+def _list_mark(t: dict, want_ids: list[str]) -> str:
+    return " 〔在片单里〕" if t["id"] in want_ids else ""
+
+
+def _list_note(domain: str, pool: list[dict], want_ids: list[str]) -> str:
+    if not any(t["id"] in want_ids for t in pool):
+        return ""
+    w = WORDS[domain]
+    return (f"\n候选后面标了〔在片单里〕的，是用户自己存下、想{w['verb']}的。"
+            f"合适就优先考虑，reason 里可以提一句它在你的{w['list']}里；不合适不必勉强。")
 
 
 # ================================================================ web search
@@ -490,7 +535,9 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
     # ------------------------------------------------------------- read
     yield _sse_step("read", "running")
     prof = store.profile()
-    seen = {i["id"] for i in store.items(domain=domain)}
+    seen, want_ids = _split_seen(domain)
+    wanted = catalog.get_many(want_ids)
+    from_list = bool(request.get("from_list")) and len(wanted) >= 3
     if mode == "none":
         memory_block, n_records = "（不读取用户记忆）", 0
     elif mode == "full":
@@ -509,6 +556,7 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         + (f"已经{w['verb']}过或不想{w['verb']}（不要再选）：{'、'.join(seen_names)}\n" if seen_names and mode != "none" else "")
         + f"明确不想碰：{'、'.join(avoid) or '（未说明）'}\n\n"
         f"## 这次的要求\n{now_req}"
+        + (f"（这次只从用户自己的{w['list']}里挑）" if from_list else "")
     )
     yield _sse_step(
         "read", "done",
@@ -539,8 +587,8 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         return library.resolve(domain, s["title"], s.get(creator_key) or None, s["year"] or None,
                                s["original"] or None)
 
-    web_seeds, web_note = _web_seeds(domain, _shelf_direction_schema(domain), d, context)
-    seeds = d["seeds"][:10] + web_seeds
+    web_seeds, web_note = ([], "") if from_list else _web_seeds(domain, _shelf_direction_schema(domain), d, context)
+    seeds = [] if from_list else d["seeds"][:10] + web_seeds
     with ThreadPoolExecutor(4) as ex:
         hits = list(ex.map(verify, seeds))
     verified: list[dict] = []
@@ -564,20 +612,24 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         year_max=d["year_max"] or None,
         exclude=exclude | {v["id"] for v in verified},
     )
-    pool = library.candidates(domain, **filt, limit=24)
     relaxed = []
-    for drop in ("genres_any", "year_min", "year_max", "langs_any", "regions_any"):
-        if len(pool) >= 10:
-            break
-        filt[drop] = None
-        relaxed.append(drop)
+    if from_list:
+        pool = wanted[:32]
+        detail = f"从你的{w['list']}里挑，一共 {len(pool)} {w['unit']}"
+    else:
         pool = library.candidates(domain, **filt, limit=24)
-    pool = (verified + pool)[:32]
-    yield _sse_step(
-        "search", "done",
-        detail=f"模型想到 {len(d['seeds'][:10])} {w['unit']}{web_note}，核实 {len(verified)} {w['unit']}；按条件再找 {len(pool) - len(verified)} {w['unit']}",
-        pool=len(pool),
-    )
+        for drop in ("genres_any", "year_min", "year_max", "langs_any", "regions_any"):
+            if len(pool) >= 10:
+                break
+            filt[drop] = None
+            relaxed.append(drop)
+            pool = library.candidates(domain, **filt, limit=24)
+        listed = _listed(wanted, verified, pool)
+        pool = (verified + listed + _without(pool, listed))[:32]
+        detail = (f"模型想到 {len(d['seeds'][:10])} {w['unit']}{web_note}，核实 {len(verified)} {w['unit']}；"
+                  f"按条件再找 {len(pool) - len(verified) - len(listed)} {w['unit']}"
+                  + (f"，加上{w['list']}里的 {len(listed)} {w['unit']}" if listed else ""))
+    yield _sse_step("search", "done", detail=detail, pool=len(pool))
     if len(pool) < 3:
         yield {"type": "error", "message": "没有找到足够的候选。换个说法再试一次。"}
         return
@@ -589,7 +641,7 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
     rel_ids = [r["id"] for r in rel]
     rel_titles = {t["id"]: t for t in catalog.get_many(rel_ids)}
     rel_block = "\n".join(memory_view.record_line(r, rel_titles.get(r["id"])) for r in rel) if mode == "layered" else ""
-    pool_block = "\n".join(library.brief(t) for t in pool)
+    pool_block = "\n".join(library.brief(t) + _list_mark(t, want_ids) for t in pool)
     pick_schema = {
         "type": "object",
         "properties": {
@@ -619,7 +671,8 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
     )
     out, st2 = client.chat(
         "big",
-        [{"role": "system", "content": SHELF_PICK.format(when=w["when"], unit=w["unit"], noun=w["noun"])},
+        [{"role": "system", "content": SHELF_PICK.format(when=w["when"], unit=w["unit"], noun=w["noun"])
+          + _list_note(domain, pool, want_ids)},
          {"role": "user", "content": pick_prompt}],
         task=f"rec_pick_{domain}",
         schema=pick_schema,
@@ -643,6 +696,8 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         if t["id"] not in used:
             used.add(t["id"])
             picks.append(_present(t, {"reason": "", "because": []}, rel_titles))
+    for p in picks:
+        p["on_list"] = p["id"] in want_ids
     reviewed = 0
     if web.enabled():
         yield _sse_step("pick", "running", detail="读网上的评价")
@@ -659,8 +714,10 @@ def run_shelf(request: dict, domain: str, mode: str = "layered") -> Iterator[dic
         "verified": len(verified),
         "relaxed": relaxed,
     }
+    # yield before saving: a run cancelled during the last model call stops
+    # here (server.sse closes the generator) and leaves no history entry
+    yield _sse_step("pick", "done", detail=f"用时 {stats['seconds']} 秒")
     rec_id = store.save_rec(request, d["direction"], picks, stats) if mode == "layered" else None
     store.event("rec", {"rec_id": rec_id, "request": request, "picks": [p["id"] for p in picks]})
-    yield _sse_step("pick", "done", detail=f"用时 {stats['seconds']} 秒")
     yield {"type": "result", "rec_id": rec_id, "direction": d["direction"], "picks": picks,
            "stats": stats, "domain": domain}

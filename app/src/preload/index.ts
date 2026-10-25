@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-export type MenuCmd = 'settings' | 'tonight' | 'want' | 'watched' | 'profile' | 'film' | 'book' | 'music'
+export type MenuCmd = 'settings' | 'tonight' | 'find' | 'want' | 'watched' | 'profile' | 'film' | 'book' | 'music'
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'full' | 'error'
@@ -21,7 +21,7 @@ export interface PiankeApi {
   copy(text: string): Promise<void>
   onMenu(cb: (cmd: MenuCmd) => void): () => void
   onFocus(cb: (focused: boolean) => void): () => void
-  onBackendError(cb: (msg: string) => void): () => void
+  onBackendError(cb: (msg: string | null) => void): () => void
   /** true while the UI driver runs: skip long intro animations */
   driven: boolean
   update: {

@@ -150,12 +150,104 @@ def test_checkins_ask_once(store):
     ids = lambda: [x["id"] for x in fb.checkins("film")]  # noqa: E731
     if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "data", "catalog.sqlite")):
         pytest.skip("catalog not built")
-    assert ids() == ["tt0338564", "tt0118694", "tt6751668"]  # untouched night: all three
+    assert ids() == [f"night:{rid}"]  # untouched night: one question about the night
     fb.pass_("tt0118694", "want")
     assert ids() == ["tt0118694"]  # once one is acted on, only the listed one
     fb.dismiss_checkin("tt0118694")
     assert ids() == []
     assert fb.checkins("book") == []
+
+
+@catalog_ready
+def test_checkin_asks_only_about_the_chosen_pick(store):
+    import time
+
+    fb = _flows()
+    picks = [{"id": "tt0338564", "name": "a"}, {"id": "tt0118694", "name": "b"}, {"id": "tt6751668", "name": "c"}]
+    rid = store.save_rec({"text": "", "chips": {}, "domain": "film"}, "d", picks, {})
+    with store.db() as c:
+        c.execute("update recs set ts=? where id=?", (time.time() - 5 * 3600, rid))
+    fb.choose(rid, "tt6751668")
+    got = fb.checkins("film")
+    assert [x["id"] for x in got] == ["tt6751668"] and got[0]["chosen"]
+    # "还没顾上" brings it back later, twice at most
+    assert fb.snooze_checkin("tt6751668")["again"]
+    assert fb.checkins("film") == []
+    sn = store.get_pref("snooze")
+    sn["tt6751668"]["until"] = 0
+    store.set_pref("snooze", sn)
+    assert [x["id"] for x in fb.checkins("film")] == ["tt6751668"]
+    fb.snooze_checkin("tt6751668")
+    assert not fb.snooze_checkin("tt6751668")["again"]
+    assert fb.checkins("film") == []
+
+
+@catalog_ready
+def test_night_dismissed_once(store):
+    import time
+
+    fb = _flows()
+    picks = [{"id": "tt0338564", "name": "a"}, {"id": "tt0118694", "name": "b"}, {"id": "tt6751668", "name": "c"}]
+    rid = store.save_rec({"text": "", "chips": {}, "domain": "film"}, "d", picks, {})
+    with store.db() as c:
+        c.execute("update recs set ts=? where id=?", (time.time() - 5 * 3600, rid))
+    fb.dismiss_night(rid)
+    assert fb.checkins("film") == []
+
+
+@catalog_ready
+def test_listed_before_is_not_a_checkin(store):
+    """A pick that was already on the list (chosen from it) isn't asked about
+    as if it had been saved that night."""
+    import time
+
+    fb = _flows()
+    for pid in ("tt0338564", "tt0118694", "tt6751668"):
+        fb.set_status(pid, "want", source="manual")
+    picks = [{"id": "tt0338564", "name": "a"}, {"id": "tt0118694", "name": "b"}, {"id": "tt6751668", "name": "c"}]
+    rid = store.save_rec({"text": "", "chips": {}, "domain": "film"}, "d", picks, {})
+    with store.db() as c:
+        c.execute("update recs set ts=? where id=?", (time.time() - 5 * 3600, rid))
+    assert fb.checkins("film") == []
+    fb.choose(rid, "tt0118694")
+    assert [x["id"] for x in fb.checkins("film")] == ["tt0118694"]
+
+
+def test_list_is_a_candidate_not_an_exclusion(store):
+    from pianke.flows import recommend
+
+    store.upsert_item("tt0000031", status="watched")
+    store.upsert_item("tt0000032", status="want")
+    store.upsert_item("tt0000033", status="rejected")
+    seen, want = recommend._split_seen("film")
+    assert seen == {"tt0000031", "tt0000033"} and want == ["tt0000032"]
+
+
+def test_auto_profile_keeps_records_added_meanwhile(store, monkeypatch):
+    from pianke.flows import auto
+
+    store.set_pref("stale", 3)
+
+    def steps():
+        store.set_pref("stale", store.get_pref("stale", 0) + 1)  # a record lands mid-run
+        yield {"type": "step"}
+
+    list(auto.run(steps()))
+    assert store.get_pref("stale") == 1
+
+
+def test_onboarding_without_talk_offers_it_later(store, monkeypatch):
+    import pianke.flows.interview as iv
+
+    importlib.reload(iv)
+    monkeypatch.setattr(iv, "_finish_steps", lambda: iter(()))
+    iv.start(["film"])
+    list(iv.finish())  # straight from the cover wall
+    assert store.get_pref("onboarded") is True and iv.talked() is False
+    assert len(iv.start(["film"])["turns"]) == 1 and iv.state()["total"] == 4  # the full talk
+    store.add_turn("user", "喜欢花样年华")
+    list(iv.finish())
+    assert iv.talked() is True
 
 
 @catalog_ready
@@ -192,3 +284,25 @@ def test_wall_puts_cached_covers_first(store, monkeypatch):
     got = [t["id"] for t in interview.wall("film", n=4)]
     assert got == ["w5", "w7", "w1", "w2"]
     assert "w0" not in warmed[0] and "w5" not in warmed[0]
+
+
+def test_finish_survives_model_failure(store, monkeypatch):
+    """Onboarding must complete even when the model call fails: the user can
+    be stranded in the flow otherwise (profile can be built later)."""
+    import pianke.flows.interview as iv
+
+    importlib.reload(iv)
+    store.set_pref("interview_plan", {"domains": ["film"]})
+    store.add_turn("user", "我喜欢花样年华")
+    store.add_turn("assistant", "它哪里打动你？")
+
+    def boom(*a, **k):
+        raise RuntimeError("模型不可用")
+
+    monkeypatch.setattr(iv.client, "chat", boom)
+    # the error still reaches server.sse (which words it for the UI) ...
+    with pytest.raises(RuntimeError):
+        list(iv.finish())
+    # ... but onboarding is marked done, so the app opens next time
+    assert store.get_pref("onboarded") is True
+    assert "film" in store.get_pref("domains_onboarded")

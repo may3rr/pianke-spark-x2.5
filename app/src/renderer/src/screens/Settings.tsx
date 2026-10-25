@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { get, post, put, type LlmSettings, type Status } from '../lib/api'
 import { modelDot, modelStatusLabel } from '../lib/models'
 import { hasUpdate, mb, useUpdate } from '../lib/update'
+import { setDemo, useDemo } from '../lib/demo'
 import { BooksFillIcon, CpuFillIcon, GearFillIcon, LockFillIcon, Tile, WifiSlashFillIcon } from '../components/Icons'
 
 interface Usage {
@@ -16,10 +17,11 @@ interface Usage {
 
 const gb = (b: number | null) => (b ? `${(b / 1e9).toFixed(1)} GB` : '')
 
-export default function Settings({ status, onReset }: { status: Status; onReset: () => void }) {
+export default function Settings({ status, onReset, embedded = false }: { status: Status; onReset: () => void; embedded?: boolean }) {
   const [usage, setUsage] = useState<Usage | null>(null)
   const [confirm, setConfirm] = useState(false)
   const [coversOn, setCoversOn] = useState(status.covers_online)
+  const demo = useDemo()
   useEffect(() => {
     get<Usage>('/usage').then(setUsage).catch(() => {})
   }, [])
@@ -28,7 +30,7 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
   const maxTps = Math.max(1, ...(usage?.bench?.rows.map((r) => r.prompt_tps) ?? [1]))
   return (
     <>
-      <div className="top-strip drag-strip bar-solid" />
+      {!embedded && <div className="top-strip drag-strip bar-solid" />}
       <div className="settings-col rise-in">
         <span className="page-icon">
           <Tile color="var(--tile-grey)" size={56} icon={<GearFillIcon size={30} />} />
@@ -52,7 +54,7 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                       ? `。经 ${m.host} 调用`
                       : `。${[m.file, gb(m.size_bytes), `上下文 ${(m.ctx / 1024).toFixed(0)}K`, '用到时才加载'].filter(Boolean).join('，')}`}
                   </div>
-                  {u && (
+                  {u && demo && (
                     <div className="t13 secondary">
                       调用 {u.calls} 次，读入 {u.prompt_tokens.toLocaleString()} 个 token，生成 {u.completion_tokens.toLocaleString()} 个，平均每秒生成 {u.avg_gen_tps} 个
                     </div>
@@ -66,9 +68,20 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
               </div>
             )
           })}
+          <div className="set-row">
+            <div className="set-main">
+              <div style={{ fontWeight: 500 }}>演示模式</div>
+              <div className="t13 secondary">
+                打开后，推荐页、画像页和这里会写出模型名称、用时和读入的 token 数，方便演示模型在本机运行。平时用不到。
+              </div>
+            </div>
+            <button className={`switch${demo ? ' on' : ''}`} role="switch" aria-checked={demo} onClick={() => setDemo(!demo)} data-demo>
+              <span />
+            </button>
+          </div>
         </div>
 
-        {usage?.bench && (
+        {demo && usage?.bench && (
           <>
             <h2 className="section-h">长记忆读入速度</h2>
             <div className="t13 secondary">

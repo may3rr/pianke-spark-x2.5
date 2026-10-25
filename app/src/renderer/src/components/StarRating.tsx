@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 
-const STAR = 'M12 2.6l2.8 6 6.6.7-4.9 4.5 1.4 6.5L12 17l-5.9 3.3 1.4-6.5-4.9-4.5 6.6-.7z'
+// exact 5-point star: center (12,12), outer r 9.3, inner r 3.9, one point up
+const STAR = 'M12 2.7L14.29 8.84L20.84 9.13L15.71 13.21L17.47 19.52L12 15.9L6.53 19.52L8.29 13.21L3.16 9.13L9.71 8.84z'
 
 function StarGlyph({ fill, size }: { fill: number; size: number }) {
   // fill: 0, 0.5 or 1

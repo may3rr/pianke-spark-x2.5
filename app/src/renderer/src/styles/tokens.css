@@ -28,17 +28,17 @@
   --medium-text: #a05a00;
   --ok-text: #1e7e34;
 
-  /* 图标色块（图层 tile；非语义色相——语义色只表达状态，不当图层色。
-     白字上图标，不需要文本对比度） */
-  --tile-indigo: #5856d6;    /* 文献真实性 */
-  --tile-blue: #007aff;      /* 论断支持度 */
-  --tile-teal: #30b0c7;      /* 引用分布 */
-  --tile-purple: #af52de;    /* 格式规范 */
-  --tile-grey: #8e8e93;      /* 全部问题 */
-  /* 期刊评审的智能体色。取偏品红的粉，而不是 macOS 的 #ff2d55：
+  /* 图标色块（书架与功能 tile；非语义色相——语义色只表达状态，不当图层色。
+     白字上图标，不需要文本对比度。分配见 DESIGN.md 6.2 */
+  --tile-indigo: #5856d6;    /* 影视书架；定方向 */
+  --tile-blue: #007aff;      /* 挑选 */
+  --tile-teal: #30b0c7;      /* 书书架；核实 */
+  --tile-purple: #af52de;    /* 读画像 */
+  --tile-grey: #8e8e93;      /* 中性功能 */
+  /* 音乐书架色。取偏品红的粉，而不是 macOS 的 #ff2d55：
      后者与语义红 --high 只差十几度，会被读成「严重问题」 */
-  --tile-pink: #d6409f;      /* 期刊评审 */
-  --on-tile: #ffffff;        /* 色块与智能体小球上的眼睛 / 白色 glyph */
+  --tile-pink: #d6409f;      /* 音乐书架 */
+  --on-tile: #ffffff;        /* 色块上的白色 glyph */
 
   /* 品牌色：设置页供应商图标（LobeHub lobe-icons 品牌色） */
   --brand-qwen: #6336e7;

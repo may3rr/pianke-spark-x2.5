@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { get, waitBackend, type Domain, type RecResult, type Status } from './lib/api'
 import { morph } from './lib/vt'
 import { DOMAIN_ORDER } from './lib/domains'
@@ -9,6 +9,8 @@ import DomainView, { type Tab } from './screens/DomainView'
 import ProfilePage from './screens/ProfilePage'
 import Settings from './screens/Settings'
 import { syncModels } from './lib/models'
+import QuickFind from './components/QuickFind'
+import Toast from './components/Toast'
 
 export interface PastRec extends RecResult {
   id: number
@@ -23,9 +25,15 @@ export default function App() {
   const [status, setStatus] = useState<Status | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
   const [view, setViewRaw] = useState<View>('film')
+  // onboarding can still open Settings (model missing → switch to an API)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [tabs, setTabs] = useState<Record<Domain, Tab>>({ film: 'rec', book: 'rec', music: 'rec' })
   const [nights, setNights] = useState<Record<Domain, TonightState>>({ film: blank(), book: blank(), music: blank() })
   const [recs, setRecs] = useState<PastRec[]>([])
+  const [finding, setFinding] = useState(false)
+  // when the user last looked at each shelf: a result that came in after
+  // that gets a dot in the sidebar
+  const [lookedAt, setLookedAt] = useState<Record<Domain, number>>({ film: 0, book: 0, music: 0 })
   const setNight = (d: Domain) => (u: React.SetStateAction<TonightState>) =>
     setNights((n) => ({ ...n, [d]: typeof u === 'function' ? (u as (s: TonightState) => TonightState)(n[d]) : u }))
   const setTab = (d: Domain, t: Tab) => morph(() => setTabs((x) => ({ ...x, [d]: t })))
@@ -48,25 +56,26 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const ok = await waitBackend()
-      if (!alive) return
-      if (!ok) {
-        const i = await window.pianke.getInfo()
-        setBootError(i.backendError || '本地服务没有启动')
-        return
-      }
-      await refresh()
-      await refreshRecs()
-    })()
-    const off = window.pianke.onBackendError((m) => setBootError(m))
-    return () => {
-      alive = false
-      off()
+  const boot = useCallback(async () => {
+    const ok = await waitBackend()
+    if (!ok) {
+      const i = await window.pianke.getInfo()
+      setBootError(i.backendError || '本地服务没有启动')
+      return
     }
+    await refresh()
+    await refreshRecs()
   }, [refresh, refreshRecs])
+
+  useEffect(() => {
+    const off = window.pianke.onBackendError((m) => {
+      setBootError(m)
+      // the main process restarted the backend and it is healthy again
+      if (m === null) void boot()
+    })
+    void boot()
+    return off
+  }, [boot])
 
   // poll while models load; slow heartbeat afterwards keeps counts fresh
   useEffect(() => {
@@ -85,14 +94,45 @@ export default function App() {
 
   const setView = useCallback((v: View) => morph(() => setViewRaw(v)), [])
 
+  useEffect(() => {
+    if (isDomain(view)) setLookedAt((l) => ({ ...l, [view]: Date.now() }))
+  }, [view, nights.film.doneAt, nights.book.doneAt, nights.music.doneAt])
+
+  const shelfState = useMemo(() => {
+    const out = {} as Record<Domain, 'running' | 'done' | null>
+    for (const d of DOMAIN_ORDER) {
+      const n = nights[d]
+      out[d] =
+        n.phase === 'running' && !n.error ? 'running' : n.phase === 'result' && (n.doneAt ?? 0) > lookedAt[d] && view !== d ? 'done' : null
+    }
+    return out
+  }, [nights, lookedAt, view])
+
+  // typical time per shelf, from the last few recommendations
+  const eta = useMemo(() => {
+    const out = {} as Record<Domain, number | null>
+    for (const d of DOMAIN_ORDER) {
+      const xs = recs
+        .filter((r) => (r.domain ?? 'film') === d && r.stats?.seconds)
+        .slice(0, 5)
+        .map((r) => r.stats.seconds)
+        .sort((a, b) => a - b)
+      out[d] = xs.length ? xs[Math.floor(xs.length / 2)] : null
+    }
+    return out
+  }, [recs])
+
   useEffect(
     () =>
       window.pianke.onMenu((cmd) => {
         morph(() => {
           if (cmd === 'tonight') {
-            setNights((n) => ({ ...n, film: blank() }))
+            // a running recommendation is left alone; this only opens the page
+            setNights((n) => (n.film.phase === 'running' ? n : { ...n, film: blank() }))
             setTabs((x) => ({ ...x, film: 'rec' }))
             setViewRaw('film')
+          } else if (cmd === 'find') {
+            setFinding(true)
           } else if (cmd === 'want' || cmd === 'watched') {
             setTabs((x) => ({ ...x, film: cmd === 'want' ? 'want' : 'records' }))
             setViewRaw('film')
@@ -116,16 +156,39 @@ export default function App() {
   if (!status) {
     return <div className="h-full drag-strip" style={{ background: 'var(--bg)' }} />
   }
+  // onboarding can still open Settings (model missing → switch to an API),
+  // so the first run never dead-ends
   if (!status.onboarded) {
     return (
-      <Onboarding
-        status={status}
-        onDone={async () => {
-          const s = await get<Status>('/status')
-          setStatus(s)
-          morph(() => setViewRaw(DOMAIN_ORDER.find((d) => s.domains_onboarded.includes(d)) ?? 'film'))
-        }}
-      />
+      <>
+        {settingsOpen && (
+          <div className="h-full relative">
+            <div
+              className="drag-strip bar-solid"
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52, zIndex: 5, display: 'flex', alignItems: 'center', paddingLeft: 20, gap: 4 }}
+            >
+              <button className="t13" onClick={() => setSettingsOpen(false)} data-ob-back>
+                ‹ 返回引导
+              </button>
+            </div>
+            <main className="main-area" style={{ top: 52, left: 0 }}>
+              <Settings status={status} onReset={refresh} embedded />
+            </main>
+          </div>
+        )}
+        {/* stays mounted while Settings is open, so coming back lands on the same step */}
+        <div className="h-full" style={settingsOpen ? { display: 'none' } : undefined}>
+          <Onboarding
+            status={status}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onDone={async () => {
+              const s = await get<Status>('/status')
+              setStatus(s)
+              morph(() => setViewRaw(DOMAIN_ORDER.find((d) => s.domains_onboarded.includes(d)) ?? 'film'))
+            }}
+          />
+        </div>
+      </>
     )
   }
 
@@ -143,15 +206,13 @@ export default function App() {
     <div className="h-full relative">
       <Sidebar
         view={view}
-        setView={(v) => {
-          if (isDomain(v) && view === v && tabs[v] === 'rec' && nights[v].phase === 'result') {
-            morph(() => setNight(v)(blank()))
-          } else setView(v)
-        }}
+        setView={setView}
         status={status}
         recs={recs}
         openRec={openRec}
         activeRec={activeRec}
+        shelfState={shelfState}
+        onFind={() => setFinding(true)}
       />
       <main className="main-area">
         {isDomain(view) && (
@@ -163,6 +224,7 @@ export default function App() {
             status={status}
             tonight={nights[view]}
             setTonight={setNight(view)}
+            eta={eta[view]}
             onChanged={() => {
               refresh()
               refreshRecs()
@@ -172,6 +234,17 @@ export default function App() {
         {view === 'profile' && <ProfilePage status={status} onChanged={refresh} />}
         {view === 'settings' && <Settings status={status} onReset={refresh} />}
       </main>
+      {finding && (
+        <QuickFind
+          domain={isDomain(view) ? view : 'film'}
+          onClose={() => setFinding(false)}
+          onChanged={() => {
+            refresh()
+            refreshRecs()
+          }}
+        />
+      )}
+      <Toast />
     </div>
   )
 }

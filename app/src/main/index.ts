@@ -26,6 +26,10 @@ let win: BrowserWindow | null = null
 let backend: ChildProcess | null = null
 let backendError: string | null = null
 let port = 18740
+let quitting = false
+// crash-restart state: delay doubles per consecutive crash, resets after a minute up
+let restartDelay = 1000
+let backendStartedAt = 0
 
 // ---------------------------------------------------------------- backend
 
@@ -51,7 +55,9 @@ function freePort(): Promise<number> {
 }
 
 async function startBackend(): Promise<void> {
+  if (backend) return // a supervisor restart is already in flight
   if (!(await portFree(port))) port = await freePort()
+  backendStartedAt = Date.now()
   if (app.isPackaged) {
     const res = process.resourcesPath
     fs.mkdirSync(PIANKE_HOME, { recursive: true })
@@ -82,20 +88,64 @@ async function startBackend(): Promise<void> {
     backend.stderr?.on('data', (d) => process.stderr.write(`[backend] ${d}`))
   }
   backend.on('error', (e) => {
-    backendError = `spawn: ${e.message}`
-    win?.webContents.send('pianke:backend-error', backendError)
+    backend = null
+    if (!quitting) scheduleBackendRestart(`后端启动失败：${e.message}`)
   })
   backend.on('exit', (code) => {
-    if (code && code !== 0 && !backendError) {
+    const wasUp = Date.now() - backendStartedAt
+    if (wasUp > 60_000) restartDelay = 1000 // it was stable; start counting again
+    backend = null
+    if (!quitting) {
+      scheduleBackendRestart(code ? `后端退出了（退出码 ${code}）` : '后端意外退出')
+    } else if (code && code !== 0 && !backendError) {
       backendError = `退出码 ${code}`
-      win?.webContents.send('pianke:backend-error', backendError)
     }
   })
 }
 
-function killBackend() {
-  if (backend && !backend.killed) backend.kill('SIGTERM')
+/** Restart the backend after a crash, with backoff; tell the renderer when
+ *  it is healthy again so the error screen can let go. */
+function scheduleBackendRestart(reason: string): void {
+  backendError = `${reason}，${Math.round(restartDelay / 1000)} 秒后自动重启`
+  win?.webContents.send('pianke:backend-error', backendError)
+  const wait = restartDelay
+  restartDelay = Math.min(restartDelay * 2, 30_000)
+  setTimeout(() => {
+    if (quitting || backend) return
+    startBackend().then(async () => {
+      const deadline = Date.now() + 30_000
+      while (Date.now() < deadline && !quitting) {
+        if (!(await portFree(port))) break // someone is listening again
+        await new Promise((r) => setTimeout(r, 400))
+      }
+      if (!quitting) {
+        backendError = null
+        win?.webContents.send('pianke:backend-error', null)
+      }
+    })
+  }, wait)
+}
+
+let stopping: Promise<void> | null = null
+
+/** Stop the backend for good (quit or update); resolves once it has exited.
+ *  It stops the llama-servers one after another, up to 5 s each, so give it
+ *  room before the SIGKILL. */
+function killBackend(): Promise<void> {
+  quitting = true // no supervisor restart from here on
+  if (stopping) return stopping
+  const b = backend
   backend = null
+  if (!b || b.exitCode !== null || b.signalCode !== null) return Promise.resolve()
+  stopping = new Promise((resolve) => {
+    const force = setTimeout(() => b.kill('SIGKILL'), 12_000)
+    b.once('exit', () => {
+      clearTimeout(force)
+      resolve()
+    })
+  })
+  b.kill('SIGTERM')
+  return stopping
 }
 
 // ---------------------------------------------------------------- ipc
@@ -478,6 +528,7 @@ function buildMenu() {
       label: '片刻',
       submenu: [
         { label: '今晚看什么', accelerator: 'CmdOrCtrl+N', click: menuClick('tonight') },
+        { label: '找作品…', accelerator: 'CmdOrCtrl+K', click: menuClick('find') },
         { type: 'separator' },
         { label: '影视', accelerator: 'CmdOrCtrl+1', click: menuClick('film') },
         { label: '书', accelerator: 'CmdOrCtrl+2', click: menuClick('book') },
@@ -560,5 +611,17 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', killBackend)
-process.on('exit', killBackend)
+// hold the quit until the backend (and its llama-servers) are down: otherwise
+// the SIGKILL fallback dies with us, and an update's swap script (which waits
+// on our pid) would replace files under a backend that is still running
+let backendDown = false
+app.on('before-quit', (e) => {
+  if (backendDown) return
+  e.preventDefault()
+  for (const w of BrowserWindow.getAllWindows()) w.hide()
+  killBackend().then(() => {
+    backendDown = true
+    app.quit()
+  })
+})
+process.on('exit', () => backend?.kill('SIGKILL'))

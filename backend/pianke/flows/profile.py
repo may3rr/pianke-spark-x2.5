@@ -147,7 +147,8 @@ def _user_claims(p: dict | None) -> dict[str, list[dict]]:
 def _diff(prev: dict | None, doc: dict) -> dict:
     old = {c["text"] for s in (prev["doc"]["sections"] if prev else []) for c in s["claims"]}
     new = {c["text"] for s in doc["sections"] for c in s["claims"]}
-    return {"added": len(new - old), "removed": len(old - new), "kept": len(new & old)}
+    return {"added": len(new - old), "removed": len(old - new), "kept": len(new & old),
+            "added_texts": sorted(new - old)[:12]}
 
 
 def edit(doc: dict) -> dict:

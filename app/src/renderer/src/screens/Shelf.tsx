@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { del, enc, get, patch, type Domain, type Item, type PassReason, type Title } from '../lib/api'
+import { del, enc, get, patch, post, type Domain, type Item, type PassReason, type Title } from '../lib/api'
 import { DOMAINS } from '../lib/domains'
 import { metaLine, reltime } from '../lib/format'
 import { morph } from '../lib/vt'
@@ -8,6 +8,8 @@ import LogPanel from '../components/LogPanel'
 import StarRating, { StarsView } from '../components/StarRating'
 import { ChevronLeftIcon, GridIcon, ListIcon, PlusIcon, Spinner, XmarkIcon } from '../components/Icons'
 import { models, shortName } from '../lib/models'
+import { useDemo } from '../lib/demo'
+import { toast } from '../lib/toast'
 
 type Kind = 'want' | 'records'
 
@@ -37,6 +39,25 @@ export default function Shelf({
     }
   })
   const [filter, setFilter] = useState<'all' | 'watched' | 'dropped'>('all')
+  // removed but still undoable: hidden here, deleted when the toast goes
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const remove = (it: Item, text: string) => {
+    setHidden((h) => new Set(h).add(it.id))
+    toast({
+      text,
+      commit: async () => {
+        await del(`/items/${enc(it.id)}`)
+        await load().catch(() => {})
+        onChanged()
+      },
+      undo: () =>
+        setHidden((h) => {
+          const n = new Set(h)
+          n.delete(it.id)
+          return n
+        }),
+    })
+  }
 
   const load = useCallback(async () => {
     const all = await get<Item[]>(`/items?domain=${domain}`)
@@ -72,17 +93,15 @@ export default function Shelf({
             onChanged()
           }}
           onDeleted={() => {
-            morph(() => {
-              setPage(null)
-              load()
-            })
-            onChanged()
+            morph(() => setPage(null))
+            remove(it, `已删除《${it.title?.name ?? it.id}》的记录`)
           }}
         />
       )
   }
 
-  const shown = (items ?? []).filter((i) => filter === 'all' || i.status === filter)
+  const visible = (items ?? []).filter((i) => !hidden.has(i.id))
+  const shown = visible.filter((i) => filter === 'all' || i.status === filter)
   return (
     <>
       <div className="page page-wide">
@@ -93,14 +112,14 @@ export default function Shelf({
                 ? `${c.verb}完点一下，打个分、写几句，片刻就记住了。`
                 : `你写下的每句话都原样留在这台 Mac 上，口味画像从这里整理出来。`}
             </div>
-            {kind === 'records' && !adding && (
+            {!adding && (
               <button className="pill-sm" onClick={() => setAdding(true)} data-add>
                 <PlusIcon size={14} />
-                补记一{c.unit}
+                {kind === 'records' ? `补记一${c.unit}` : `加一${c.unit}`}
               </button>
             )}
           </div>
-          {kind === 'records' && (items?.length ?? 0) > 0 && (
+          {kind === 'records' && visible.length > 0 && (
             <div className="view-bar">
               <div className="seg seg-sm">
                 {(['all', 'watched', 'dropped'] as const).map((f) => (
@@ -124,6 +143,7 @@ export default function Shelf({
         {adding && (
           <AddRecord
             domain={domain}
+            want={kind === 'want'}
             onCancel={() => setAdding(false)}
             onDone={() => {
               setAdding(false)
@@ -134,15 +154,15 @@ export default function Shelf({
         )}
 
         <div style={{ marginTop: 16 }}>
-          {items && items.length === 0 && !adding && (
+          {items && visible.length === 0 && !adding && (
             <div className="empty-note secondary">
               {kind === 'want'
-                ? `${c.list}还是空的。推荐给你的${c.noun}，点“没${c.verb}”再选“想${c.verb}，先存着”就会放进来。`
+                ? `${c.list}还是空的。推荐页上点“先存着”，或者点右上角的“加一${c.unit}”。`
                 : `还没有记录。${c.verb}完一${c.unit}，回来打个分、说说感受。`}
             </div>
           )}
           {kind === 'want' &&
-            items?.map((it, idx) => (
+            visible.map((it, idx) => (
               <WantRow
                 key={it.id}
                 it={it}
@@ -156,11 +176,7 @@ export default function Shelf({
                   })
                   onChanged()
                 }}
-                onDelete={async () => {
-                  await del(`/items/${enc(it.id)}`)
-                  morph(() => load())
-                  onChanged()
-                }}
+                onDelete={() => remove(it, `已从${c.list}移除《${it.title?.name ?? it.id}》`)}
               />
             ))}
           {kind === 'records' && layout === 'gallery' && (
@@ -283,7 +299,7 @@ function RecordPage({
   const [cur, setCur] = useState<Item>(it)
   const [words, setWords] = useState(it.words)
   const [saving, setSaving] = useState<null | 'words' | 'field'>(null)
-  const [confirm, setConfirm] = useState(false)
+  const demo = useDemo()
   const area = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -401,7 +417,7 @@ function RecordPage({
         {saving === 'words' ? (
           <>
             <Spinner size={12} />
-            {shortName(models().small)} 正在{models().onDevice ? '本机' : ''}重读你的评语
+            {demo ? `${shortName(models().small)} 正在${models().onDevice ? '本机' : ''}重读你的评语` : '正在重读你的评语'}
           </>
         ) : saving === 'field' ? (
           '正在保存'
@@ -411,26 +427,9 @@ function RecordPage({
       </div>
 
       <div className="record-foot">
-        {confirm ? (
-          <span className="flex" style={{ gap: 8 }}>
-            <button className="pill-sm dim" onClick={() => setConfirm(false)}>
-              取消
-            </button>
-            <button
-              className="pill-sm danger"
-              onClick={async () => {
-                await del(`/items/${enc(it.id)}`)
-                onDeleted()
-              }}
-            >
-              确认删除这条记录
-            </button>
-          </span>
-        ) : (
-          <button className="pill-sm dim" onClick={() => setConfirm(true)}>
-            删除记录
-          </button>
-        )}
+        <button className="pill-sm dim" onClick={onDeleted} data-record-delete>
+          删除记录
+        </button>
       </div>
     </div>
   )
@@ -438,8 +437,24 @@ function RecordPage({
 
 // ------------------------------------------------------------ add a record
 
-function AddRecord({ domain, onCancel, onDone }: { domain: Domain; onCancel: () => void; onDone: () => void }) {
+function AddRecord({
+  domain,
+  want = false,
+  onCancel,
+  onDone,
+}: {
+  domain: Domain
+  /** put the found work on the list instead of logging it */
+  want?: boolean
+  onCancel: () => void
+  onDone: () => void
+}) {
   const c = DOMAINS[domain]
+  const addWant = async (t: Title) => {
+    await post(`/items/${enc(t.id)}/status`, { status: 'want', source: 'manual' })
+    toast({ text: `已放进${c.list}：《${t.name}》` })
+    onDone()
+  }
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Title[]>([])
   const [busy, setBusy] = useState(false)
@@ -494,9 +509,14 @@ function AddRecord({ domain, onCancel, onDone }: { domain: Domain; onCancel: () 
           正在查找
         </div>
       )}
+      {!busy && q.trim() && hits.length === 0 && (
+        <div className="t13 secondary" style={{ padding: '8px 4px' }}>
+          没找到。换个写法，或试试原名、{domain === 'book' ? '作者' : domain === 'music' ? '歌手' : '导演'}名。
+        </div>
+      )}
       <div className="search-results">
         {hits.map((h) => (
-          <button key={h.id} className="search-hit search-hit-cover" onClick={() => setPicked(h)} data-hit={h.id}>
+          <button key={h.id} className="search-hit search-hit-cover" onClick={() => (want ? addWant(h) : setPicked(h))} data-hit={h.id}>
             <Cover t={h} width={32} radius={3} />
             <span style={{ minWidth: 0 }}>
               <span className="film-name" style={{ fontSize: 17, display: 'block' }}>
