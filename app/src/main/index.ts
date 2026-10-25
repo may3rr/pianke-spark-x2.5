@@ -1,14 +1,19 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { spawn, ChildProcess, execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import net from 'node:net'
 import path from 'node:path'
 import fs from 'node:fs'
+import { applyUpdate, checkForUpdate, downloadUpdate, openReleasePage, startUpdateChecks, updateState } from './updater'
 
-// dev: the conda env and the repo's backend/; the backend in turn starts the
-// two llama-server processes (Spark-X2.5 4B and 1.7B) on loopback ports
-const PYTHON = process.env.PIANKE_PYTHON || '/opt/anaconda3/envs/claude/bin/python'
+// dev: a Python 3.11+ with the backend's dependencies and the repo's backend/.
+// installed: the frozen backend and the catalogs in the bundle's Resources
+// (see scripts/build-backend.sh). Either way the backend starts the two
+// llama-server processes (Spark-X2.5 4B and 1.7B) on loopback ports.
+const PYTHON = process.env.PIANKE_PYTHON || 'python3'
 const BACKEND_DIR = path.resolve(import.meta.dirname, '../../../backend')
+// where the backend keeps the user's data; models live here once installed
+const PIANKE_HOME = process.env.PIANKE_HOME || path.join(app.getPath('appData'), 'Pianke')
 const TOKEN = randomBytes(32).toString('hex')
 const THEME = process.env.PIANKE_THEME
 /** UI driver for screenshots and demo recording: a JSON list of steps */
@@ -21,6 +26,10 @@ let win: BrowserWindow | null = null
 let backend: ChildProcess | null = null
 let backendError: string | null = null
 let port = 18740
+let quitting = false
+// crash-restart state: delay doubles per consecutive crash, resets after a minute up
+let restartDelay = 1000
+let backendStartedAt = 0
 
 // ---------------------------------------------------------------- backend
 
@@ -46,32 +55,97 @@ function freePort(): Promise<number> {
 }
 
 async function startBackend(): Promise<void> {
+  if (backend) return // a supervisor restart is already in flight
   if (!(await portFree(port))) port = await freePort()
-  backend = spawn(
-    PYTHON,
-    ['-m', 'uvicorn', 'pianke.server:app', '--host', '127.0.0.1', '--port', String(port)],
-    {
-      cwd: BACKEND_DIR,
-      env: { ...process.env, PIANKE_TOKEN: TOKEN },
-    }
-  )
-  backend.stdout?.on('data', (d) => process.stdout.write(`[backend] ${d}`))
-  backend.stderr?.on('data', (d) => process.stderr.write(`[backend] ${d}`))
+  backendStartedAt = Date.now()
+  if (app.isPackaged) {
+    const res = process.resourcesPath
+    fs.mkdirSync(PIANKE_HOME, { recursive: true })
+    const log = fs.createWriteStream(path.join(PIANKE_HOME, 'backend.log'), { flags: 'w' })
+    backend = spawn(path.join(res, 'backend', 'pianke-backend'), ['--port', String(port)], {
+      env: {
+        ...process.env,
+        PIANKE_TOKEN: TOKEN,
+        PIANKE_HOME,
+        PIANKE_DATA: path.join(res, 'data'),
+        // our Python code, as source beside the frozen runtime (updates swap it alone)
+        PIANKE_SRC: path.join(res, 'backend-src'),
+        PIANKE_MODELS: process.env.PIANKE_MODELS || path.join(PIANKE_HOME, 'models'),
+      },
+    })
+    backend.stdout?.pipe(log)
+    backend.stderr?.pipe(log)
+  } else {
+    backend = spawn(
+      PYTHON,
+      ['-m', 'uvicorn', 'pianke.server:app', '--host', '127.0.0.1', '--port', String(port)],
+      {
+        cwd: BACKEND_DIR,
+        env: { ...process.env, PIANKE_TOKEN: TOKEN },
+      }
+    )
+    backend.stdout?.on('data', (d) => process.stdout.write(`[backend] ${d}`))
+    backend.stderr?.on('data', (d) => process.stderr.write(`[backend] ${d}`))
+  }
   backend.on('error', (e) => {
-    backendError = `spawn: ${e.message}`
-    win?.webContents.send('pianke:backend-error', backendError)
+    backend = null
+    if (!quitting) scheduleBackendRestart(`后端启动失败：${e.message}`)
   })
   backend.on('exit', (code) => {
-    if (code && code !== 0 && !backendError) {
+    const wasUp = Date.now() - backendStartedAt
+    if (wasUp > 60_000) restartDelay = 1000 // it was stable; start counting again
+    backend = null
+    if (!quitting) {
+      scheduleBackendRestart(code ? `后端退出了（退出码 ${code}）` : '后端意外退出')
+    } else if (code && code !== 0 && !backendError) {
       backendError = `退出码 ${code}`
-      win?.webContents.send('pianke:backend-error', backendError)
     }
   })
 }
 
-function killBackend() {
-  if (backend && !backend.killed) backend.kill('SIGTERM')
+/** Restart the backend after a crash, with backoff; tell the renderer when
+ *  it is healthy again so the error screen can let go. */
+function scheduleBackendRestart(reason: string): void {
+  backendError = `${reason}，${Math.round(restartDelay / 1000)} 秒后自动重启`
+  win?.webContents.send('pianke:backend-error', backendError)
+  const wait = restartDelay
+  restartDelay = Math.min(restartDelay * 2, 30_000)
+  setTimeout(() => {
+    if (quitting || backend) return
+    startBackend().then(async () => {
+      const deadline = Date.now() + 30_000
+      while (Date.now() < deadline && !quitting) {
+        if (!(await portFree(port))) break // someone is listening again
+        await new Promise((r) => setTimeout(r, 400))
+      }
+      if (!quitting) {
+        backendError = null
+        win?.webContents.send('pianke:backend-error', null)
+      }
+    })
+  }, wait)
+}
+
+let stopping: Promise<void> | null = null
+
+/** Stop the backend for good (quit or update); resolves once it has exited.
+ *  It stops the llama-servers one after another, up to 5 s each, so give it
+ *  room before the SIGKILL. */
+function killBackend(): Promise<void> {
+  quitting = true // no supervisor restart from here on
+  if (stopping) return stopping
+  const b = backend
   backend = null
+  if (!b || b.exitCode !== null || b.signalCode !== null) return Promise.resolve()
+  stopping = new Promise((resolve) => {
+    const force = setTimeout(() => b.kill('SIGKILL'), 12_000)
+    b.once('exit', () => {
+      clearTimeout(force)
+      resolve()
+    })
+  })
+  b.kill('SIGTERM')
+  return stopping
 }
 
 // ---------------------------------------------------------------- ipc
@@ -89,6 +163,16 @@ ipcMain.handle('pianke:open-external', (_e, url: string) => {
 ipcMain.handle('pianke:reveal', (_e, p: string) => {
   shell.showItemInFolder(p)
 })
+
+ipcMain.handle('pianke:copy', (_e, text: string) => {
+  if (typeof text === 'string') clipboard.writeText(text)
+})
+
+ipcMain.handle('pianke:update-state', () => updateState())
+ipcMain.handle('pianke:update-check', () => checkForUpdate())
+ipcMain.handle('pianke:update-download', () => downloadUpdate())
+ipcMain.handle('pianke:update-apply', () => applyUpdate(killBackend))
+ipcMain.handle('pianke:update-page', () => openReleasePage())
 
 // ---------------------------------------------------------------- driver
 
@@ -444,6 +528,7 @@ function buildMenu() {
       label: '片刻',
       submenu: [
         { label: '今晚看什么', accelerator: 'CmdOrCtrl+N', click: menuClick('tonight') },
+        { label: '找作品…', accelerator: 'CmdOrCtrl+K', click: menuClick('find') },
         { type: 'separator' },
         { label: '影视', accelerator: 'CmdOrCtrl+1', click: menuClick('film') },
         { label: '书', accelerator: 'CmdOrCtrl+2', click: menuClick('book') },
@@ -485,6 +570,22 @@ async function createWindow() {
   if (DRIVE) {
     win.webContents.on('console-message', (_e, _l, msg) => console.log(`[renderer] ${msg}`))
   }
+  // Electron has no right-click menu of its own: copy on a selection, the
+  // usual edit commands in a text box
+  win.webContents.on('context-menu', (_e, p) => {
+    const items: Electron.MenuItemConstructorOptions[] = p.isEditable
+      ? [
+          { role: 'cut', label: '剪切', enabled: p.editFlags.canCut },
+          { role: 'copy', label: '拷贝', enabled: p.editFlags.canCopy },
+          { role: 'paste', label: '粘贴', enabled: p.editFlags.canPaste },
+          { type: 'separator' },
+          { role: 'selectAll', label: '全选' },
+        ]
+      : p.selectionText.trim()
+        ? [{ role: 'copy', label: '拷贝' }]
+        : []
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win! })
+  })
   win.on('focus', () => win?.webContents.send('pianke:focus', true))
   // a recording keeps the focused look even when another app is in front
   if (!REC_DIR) win.on('blur', () => win?.webContents.send('pianke:focus', false))
@@ -506,8 +607,21 @@ app.whenReady().then(async () => {
   buildMenu()
   await startBackend()
   await createWindow()
+  if (!DRIVE || process.env.PIANKE_UPDATE_URL) startUpdateChecks()
 })
 
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', killBackend)
-process.on('exit', killBackend)
+// hold the quit until the backend (and its llama-servers) are down: otherwise
+// the SIGKILL fallback dies with us, and an update's swap script (which waits
+// on our pid) would replace files under a backend that is still running
+let backendDown = false
+app.on('before-quit', (e) => {
+  if (backendDown) return
+  e.preventDefault()
+  for (const w of BrowserWindow.getAllWindows()) w.hide()
+  killBackend().then(() => {
+    backendDown = true
+    app.quit()
+  })
+})
+process.on('exit', () => backend?.kill('SIGKILL'))

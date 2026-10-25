@@ -1,10 +1,17 @@
 """Build data/catalog.sqlite from the IMDb non-commercial datasets.
 
-    python scripts/build_catalog.py [--raw ../data/raw] [--min-votes 3000]
+    python scripts/build_catalog.py [--raw ../data/raw] [--min-votes 3000] [--min-votes-zh 300]
 
 Keeps feature films, series and mini-series with enough votes to be
 recognisable, attaches a simplified-Chinese title from title.akas (CN first,
 then HK/TW/SG converted with OpenCC), the directors, and the top-billed cast.
+
+Works with a Chinese title get a lower bar (--min-votes-zh): Chinese-language
+films are rated far less on IMDb than their standing warrants (《推拿》 has
+under 2000 votes). Every Chinese aka is kept, simplified, as an alias, so
+《路边野餐》 matches whether IMDb filed it under CN, HK or TW. A Chinese title
+must contain Chinese characters: IMDb files Cantonese romanisations and
+English titles under these regions too.
 The result is fully local: recommendation never needs the network.
 """
 
@@ -13,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import re
 import sqlite3
 import sys
 import time
@@ -23,6 +31,7 @@ csv.field_size_limit(sys.maxsize)
 
 KINDS = {"movie": "movie", "tvSeries": "series", "tvMiniSeries": "miniseries"}
 ZH_REGIONS = ["CN", "HK", "TW", "SG", "MO"]
+CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 def rows(path: Path):
@@ -47,16 +56,18 @@ def main() -> None:
     ap.add_argument("--raw", default=str(here.parents[2] / "data" / "raw"))
     ap.add_argument("--out", default=str(here.parents[2] / "data" / "catalog.sqlite"))
     ap.add_argument("--min-votes", type=int, default=3000)
+    ap.add_argument("--min-votes-zh", type=int, default=300)
     a = ap.parse_args()
     raw = Path(a.raw)
+    floor = min(a.min_votes, a.min_votes_zh)
 
     log("ratings")
     ratings: dict[str, tuple[float, int]] = {}
     for r in rows(raw / "title.ratings.tsv.gz"):
         v = int(r["numVotes"])
-        if v >= a.min_votes:
+        if v >= floor:
             ratings[r["tconst"]] = (float(r["averageRating"]), v)
-    log(f"  {len(ratings)} titles above {a.min_votes} votes")
+    log(f"  {len(ratings)} titles above {floor} votes")
 
     log("basics")
     titles: dict[str, dict] = {}
@@ -77,6 +88,7 @@ def main() -> None:
             "rating": rating,
             "votes": votes,
             "zh": None,
+            "aliases": [],
             "directors": [],
             "cast": [],
         }
@@ -87,26 +99,41 @@ def main() -> None:
 
     t2s = OpenCC("t2s")
     best: dict[str, tuple[int, str]] = {}
+    aliases: dict[str, list[str]] = {}
     for r in rows(raw / "title.akas.tsv.gz"):
         tid = r["titleId"]
-        if tid not in titles:
+        if tid not in titles or not CJK.search(r["title"]):
             continue
         region = r["region"]
         lang = r["language"]
         if region in ZH_REGIONS:
-            rank = ZH_REGIONS.index(region)
+            rank = ZH_REGIONS.index(region) * 2
         elif lang in ("zh", "cmn", "yue"):
-            rank = len(ZH_REGIONS)
+            rank = len(ZH_REGIONS) * 2
         else:
             continue
         types = r["types"]
+        # within a region, the title IMDb displays there beats others filed
+        # under it (《路边野餐》 over its working title 《惶然录》)
+        if "imdbDisplay" not in types:
+            rank += 1
         if "working" in types or "alternative" in types:
-            rank += 10
+            rank += 20
+        zh = t2s.convert(r["title"])
+        aliases.setdefault(tid, [])
+        if zh not in aliases[tid]:
+            aliases[tid].append(zh)
         if tid not in best or rank < best[tid][0]:
-            best[tid] = (rank, r["title"])
-    for tid, (_, t) in best.items():
-        titles[tid]["zh"] = t2s.convert(t)
+            best[tid] = (rank, zh)
+    for tid, (_, zh) in best.items():
+        titles[tid]["zh"] = zh
+        titles[tid]["aliases"] = [x for x in aliases[tid] if x != zh]
     log(f"  {len(best)} have a Chinese title")
+    # the lower bar is only for works with a Chinese title
+    for tid in [t for t, v in titles.items() if v["votes"] < a.min_votes and t not in best]:
+        del titles[tid]
+    log(f"  kept {len(titles)} ({sum(1 for t in titles.values() if t['votes'] < a.min_votes)} below "
+        f"{a.min_votes} votes on the Chinese bar)")
 
     log("crew (directors)")
     director_ids: dict[str, list[str]] = {}
@@ -146,28 +173,29 @@ def main() -> None:
         """
         create table titles(
           id text primary key, kind text, title text, original text, zh text,
-          year int, end_year int, runtime int, genres text,
+          aliases text, year int, end_year int, runtime int, genres text,
           rating real, votes int, directors text, actors text
         );
         create index titles_votes on titles(votes desc);
         create index titles_year on titles(year);
         create virtual table titles_fts using fts5(
-          id unindexed, title, original, zh, directors, actors,
+          id unindexed, title, original, zh, aliases, directors, actors,
           tokenize = 'trigram'
         );
         create table meta(key text primary key, value text);
         """
     )
     db.executemany(
-        "insert into titles values(:id,:kind,:title,:original,:zh,:year,:end_year,"
+        "insert into titles values(:id,:kind,:title,:original,:zh,:aliases,:year,:end_year,"
         ":runtime,:genres,:rating,:votes,:directors,:cast)",
         [
-            {**t, "directors": "|".join(t["directors"]), "cast": "|".join(t["cast"])}
+            {**t, "aliases": "|".join(t["aliases"]), "directors": "|".join(t["directors"]),
+             "cast": "|".join(t["cast"])}
             for t in titles.values()
         ],
     )
     db.execute(
-        "insert into titles_fts select id, title, original, coalesce(zh,''),"
+        "insert into titles_fts select id, title, original, coalesce(zh,''), aliases,"
         " directors, actors from titles"
     )
     counts = {k: sum(1 for t in titles.values() if t["kind"] == k) for k in KINDS.values()}
@@ -175,6 +203,7 @@ def main() -> None:
         "source": "IMDb Non-Commercial Datasets (datasets.imdbws.com)",
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "min_votes": str(a.min_votes),
+        "min_votes_zh": str(a.min_votes_zh),
         "total": str(len(titles)),
         "with_zh": str(len(best)),
         **{f"count_{k}": str(v) for k, v in counts.items()},

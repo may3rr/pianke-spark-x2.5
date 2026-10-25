@@ -1,8 +1,8 @@
 """Covers and posters, fetched once by public title and kept on disk.
 
-  films    Douban poster by name and year; Wikipedia by IMDb id
+  films    TMDB by IMDb id (with a key); Douban by name and year; Wikipedia
   books    Douban (Chinese editions), Wikipedia lead image, Open Library
-  albums   Wikipedia lead image, Cover Art Archive by MBID, iTunes artwork
+  albums   NetEase, Wikipedia lead image, Cover Art Archive by MBID, iTunes
 
 Douban comes first where Chinese editions matter, but it answers bursts
 with empty lists, so every shelf has a fallback. A miss is remembered for
@@ -41,6 +41,9 @@ def _sources(t: dict):
     dom = t.get("domain", "film")
     by = (t.get("creators") or [None])[0]
     if dom == "film":
+        url = online.tmdb_poster(t["id"])
+        if url:
+            yield url, None
         url = online.film_poster(t["name"], t.get("original") or t.get("title") or "", t.get("year"))
         if url:
             yield url, "https://movie.douban.com/"
@@ -72,6 +75,11 @@ def _sources(t: dict):
             if url:
                 yield url, "https://book.douban.com/"
     elif dom == "music" and not ext.get("cover"):
+        for name in dict.fromkeys(x for x in (t.get("title"), t.get("original")) if x):
+            url = online.netease_cover(name, by)
+            if url:
+                yield url, None
+                break
         url = online.wiki_image(ext.get("enwiki", ""))
         if url:
             yield url, None

@@ -1,9 +1,9 @@
-"""The only place 片刻 talks to the internet.
+"""The only place 片刻 talks to the internet (model APIs aside).
 
-Rule: a request may carry a work's title, creator, year or a public id, and
-nothing else. No user words, ratings, profile text, names or identifiers ever
-leave the machine, and there is no account. Callers pass plain strings; this
-module builds the URLs itself so nothing else can slip in.
+Lookups carry a work's title, creator, year or a public id. Web search (Exa
+or Tavily, only when the user configured a key) also carries search queries
+the model writes from the user's request. Keys go in headers or in params
+that are kept out of the cache key.
 
 Responses are cached in cache.sqlite (public data only, safe to delete)."""
 
@@ -27,7 +27,11 @@ _client: httpx.Client | None = None
 # per-host politeness: at most N in flight, min gap between requests
 # Douban answers bursts with empty lists, iTunes allows ~20 searches a minute
 _HOST_LIMIT = {"douban.com": (1, 1.2), "doubanio.com": (3, 0.0), "itunes.apple.com": (1, 3.0),
-               "wikipedia.org": (2, 0.1), "wikidata.org": (2, 0.2)}
+               "wikipedia.org": (2, 0.1), "wikidata.org": (2, 0.2),
+               # TMDB allows ~50/s; image CDNs take plenty
+               "api.themoviedb.org": (6, 0.0), "image.tmdb.org": (8, 0.0),
+               "music.163.com": (2, 0.2), "music.126.net": (8, 0.0),
+               "api.exa.ai": (3, 0.0), "api.tavily.com": (3, 0.0)}
 _sems: dict[str, threading.Semaphore] = {}
 # per-thread count of requests that failed (offline, throttled), so callers
 # can tell "nothing exists" from "couldn't ask"
@@ -113,9 +117,14 @@ def _polite(url: str, lane: str = "bg") -> Iterator[None]:
 
 
 def get_json(url: str, params: dict[str, Any], *, referer: str | None = None,
-             ttl: float = 30 * 86400, lane: str = "bg") -> Any:
-    """GET a public JSON endpoint, cached. Returns None on any failure."""
+             ttl: float = 30 * 86400, lane: str = "bg", headers: dict | None = None,
+             auth: dict | None = None, body: dict | None = None) -> Any:
+    """GET (or, with body, POST) a JSON endpoint, cached. Returns None on any
+    failure. headers and auth (extra params) carry keys and stay out of the
+    cache key."""
     key = url + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
+    if body is not None:
+        key += "#" + json.dumps(body, sort_keys=True, ensure_ascii=False)
     with cache() as c:
         r = c.execute("select body, ts from http where key=?", (key,)).fetchone()
     if r:
@@ -127,8 +136,13 @@ def get_json(url: str, params: dict[str, Any], *, referer: str | None = None,
         _fails.n = failures() + 1
         return json.loads(r["body"]) if r else None
     try:
+        hdrs = {**({"Referer": referer} if referer else {}), **(headers or {})} or None
         with _polite(url, lane):
-            resp = _http().get(url, params=params, headers={"Referer": referer} if referer else None)
+            if body is not None:
+                resp = _http().post(url, params={**params, **(auth or {})}, json=body, headers=hdrs,
+                                    timeout=20)
+            else:
+                resp = _http().get(url, params={**params, **(auth or {})}, headers=hdrs)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:  # noqa: BLE001 — offline or blocked: callers fall back
@@ -139,6 +153,31 @@ def get_json(url: str, params: dict[str, Any], *, referer: str | None = None,
         c.execute("insert or replace into http values(?,?,?)",
                   (key, json.dumps(data, ensure_ascii=False), time.time()))
     return data
+
+
+def get_text(url: str, params: dict[str, Any], *, referer: str | None = None,
+             ttl: float = 7 * 86400, lane: str = "bg") -> str | None:
+    """GET a public HTML page, cached like get_json. None on any failure."""
+    key = "text:" + url + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
+    with cache() as c:
+        r = c.execute("select body, ts from http where key=?", (key,)).fetchone()
+    if r and time.time() - r["ts"] < ttl:
+        return r["body"]
+    if _is_down(url):
+        _fails.n = failures() + 1
+        return r["body"] if r else None
+    try:
+        with _polite(url, lane):
+            resp = _http().get(url, params=params, headers={"Referer": referer} if referer else None)
+        resp.raise_for_status()
+        body = resp.text
+    except Exception as e:  # noqa: BLE001 — offline or blocked: callers fall back
+        _mark(url, e)
+        _fails.n = failures() + 1
+        return r["body"] if r else None
+    with cache() as c:
+        c.execute("insert or replace into http values(?,?,?)", (key, body, time.time()))
+    return body
 
 
 def get_bytes(url: str, *, referer: str | None = None) -> bytes | None:

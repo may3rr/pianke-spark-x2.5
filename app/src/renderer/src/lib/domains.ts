@@ -11,6 +11,8 @@ export interface DomainCopy {
   finished: string
   dropped: string
   list: string
+  /** 今晚 / 接下来 / 现在 */
+  when: string
   ask: string
   pickTitle: string
   pick3: string
@@ -33,6 +35,7 @@ export const DOMAINS: Record<Domain, DomainCopy> = {
     finished: '看完了',
     dropped: '没看完',
     list: '片单',
+    when: '今晚',
     ask: '今晚看什么',
     pickTitle: '今晚的三部',
     pick3: '挑三部',
@@ -57,6 +60,7 @@ export const DOMAINS: Record<Domain, DomainCopy> = {
     finished: '读完了',
     dropped: '没读完',
     list: '书单',
+    when: '接下来',
     ask: '下一本读什么',
     pickTitle: '接下来读的三本',
     pick3: '挑三本',
@@ -81,6 +85,7 @@ export const DOMAINS: Record<Domain, DomainCopy> = {
     finished: '听完了',
     dropped: '没听完',
     list: '歌单',
+    when: '现在',
     ask: '现在听什么',
     pickTitle: '现在听的三张',
     pick3: '挑三张',

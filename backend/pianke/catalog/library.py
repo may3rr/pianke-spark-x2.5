@@ -18,7 +18,7 @@ from functools import lru_cache
 from rapidfuzz import fuzz
 
 from ..config import LIBRARY_DB
-from ..lookup import net, online
+from ..lookup import net, online, web
 from .vocab import ALBUM_REGIONS  # noqa: F401  (re-exported for schemas)
 
 _local = threading.local()
@@ -178,6 +178,8 @@ def resolve(domain: str, title: str, creator: str | None = None, year: int | Non
     found = (online.find_book if kind == "book" else online.find_album)(title, creator, year)
     if found is None and original and original != title:
         found = (online.find_book if kind == "book" else online.find_album)(original, creator, year)
+    if found is None:  # only when the user set a search key
+        found = web.find_work(kind, title, creator, year)
     return _shape(found) if found else None
 
 
@@ -192,16 +194,24 @@ def search(domain: str, q: str, limit: int = 12, *, use_online: bool = True) -> 
         sim = max(fuzz.partial_ratio(nq, n) for n in names if n) / 100
         scored.append((sim + 0.05 * math.log10(max(r["popularity"], 1)), _row(r)))
     scored.sort(key=lambda x: -x[0])
+    # a creator's name lists their works: the shelf holds only the best-known
+    # few (two of 伊坂幸太郎's), so those searches always ask online too
+    by_creator = any(nq == _norm(c) for _, t in scored for c in t["creators"])
+    if by_creator:
+        limit = max(limit, 30)
     out = [t for _, t in scored[:limit]]
     # an exact local hit answers the search; the network is only for misses
     exact = any(nq in (_norm(t["name"]), _norm(t["original"])) for t in out)
-    if use_online and len(out) < 5 and not exact:
+    if use_online and ((len(out) < 5 and not exact) or by_creator):
         more = online.search_books(q, lane="fg") if kind == "book" else online.search_albums(q, lane="fg")
-        names = {(_norm(t["name"]), _norm((t["creators"] or [""])[0])) for t in out}
+        # 《解憂雜貨店》 and 《解忧杂货店》 are one book
+        same = lambda name, by: (_norm(online.t2s(name)), _norm(online.t2s(by)))  # noqa: E731
+        names = {same(t["name"], (t["creators"] or [""])[0]) for t in out}
         for m in more:
-            key = (_norm(m["zh"] or m["title"]), _norm((m["creators"] or [""])[0]))
+            key = same(m["zh"] or m["title"], (m["creators"] or [""])[0])
             if key in names:
                 continue
+            names.add(key)
             net.save_ext(m["id"], kind, m)
             out.append(_shape(m))
     return out[:limit]

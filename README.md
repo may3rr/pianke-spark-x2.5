@@ -18,35 +18,41 @@
 
 ```
 第一次打开   选书架（影视 / 书 / 音乐，可多选，没选的以后点开时再认识）
-             → 封面墙：认出看过的，点一下是喜欢，点两下是不喜欢
+             → 封面墙：认出看过的，点封面是喜欢，点封面角上的 ✕ 是不喜欢
                （认比回忆省力得多，而且每次点击都已经是核实过的作品）
-             → 四个问题，从你点过的作品问起：它哪里打动你、那部为什么不喜欢、
-               平时什么时候看和读、有什么绝对不碰
-             → 4B 抽取对话里提到的作品 → 片库 / 书库 / 网上逐一核实 → 第一版口味画像
+             → 4B 读封面墙 → 第一版口味画像，直接去挑三部
+             → 推荐页上再提议聊两句：哪里打动你、平时什么时候看和读、有什么绝对不碰
 
-今晚看什么   你说一句今天的状态，选几个标签
+今晚看什么   你说一句今天的状态，选几个标签；片单里有三部以上时，可以只从片单里挑
   读画像     L2 口味画像 + L3 最近两周（长度固定，与历史多长无关）
   定方向     4B 把画像和今晚的要求变成片库筛选条件，并说出几部它想到的片
-  核实       每部片名先在本地片库里核实，查不到的直接丢掉，界面上如实显示
+  核实       每部片名先在本地片库里核实，查不到的直接丢掉，界面上如实显示；
+             片单里的作品也作为候选
   挑三部     4B 从候选清单里挑三部；JSON 语法约束只允许清单里的 id，
              “因为你说过”只允许指向你自己的记录，原话从数据库逐字读出
+  等待       显示已用时间和通常要多久，可以取消，也可以先去别的书架，挑好了侧栏亮点
 
-每一部推荐  “看过了”：看完了还是没看完、0 到 5 星（可拖动，半星）、评语、日期；
+每一部推荐  就看这部：记为今晚的选择，第二天只问这一部
+             先存着：一步放进片单
+             看过了：看完了还是没看完、0 到 5 星（可拖动，半星）、评语、日期；
                星级只由你给，1.7B 只从评语里整理喜欢/不喜欢的方面、状态和同伴，
                原话逐字保存
-             “没看”：选一个原因，每个原因写到不同的地方
-               想看，先存着 → 片单 / 书单 / 歌单
+             不想看：点一个原因就记下，每个原因写到不同的地方
                不感兴趣 / 知道它，不对胃口 → 带原因的负面记录，整理画像时会读
                今晚不合适 → 只进最近两周的近况，长期画像看不到它
 
-第二天       “昨晚的《无间道》看了吗？” 加进片单的、或者那晚一部都没碰的，
-             下次打开时问一次（书隔两周内，音乐两天内），可以答“还没顾上”
+第二天       选了“就看这部”的，问“昨晚选的《无间道》看了吗？”；从推荐里存进片单的，
+             问一次；那晚一部都没碰的，只问一句“昨晚挑的三部，看了其中一部吗？”，
+             点封面记一下。“过几天再问”会在回访周期后再问（书两周，音乐两天），最多两次
 
 记录         每个书架一份自己的日志：画廊或表格，点开是可编辑的记录页
-             （状态、星级、日期、来由、评语），改评语时 1.7B 重读一遍
+             （状态、星级、日期、来由、评语），改评语时 1.7B 重读一遍；
+             ⌘K 在任何地方按名字找作品，直接记一笔或放进片单；删除都可以撤销
 
-整理画像     4B 把全部记录完整读一遍（这里用上长上下文），重写画像；
-             每条结论都标出依据的片子；你改过的条目永远保留
+整理画像     有新记录后，片刻在空闲时自动整理（3 条以上等 2 分钟，否则等 10 分钟，
+             推荐和访谈进行时让路）：4B 把全部记录完整读一遍（这里用上长上下文），
+             重写画像，画像页标出这次新加的条目；每条结论都标出依据的片子；
+             你改过的条目永远保留
 ```
 
 ### 分层记忆
@@ -71,7 +77,7 @@
 
 | 书架 | 本地库（筛候选、封面墙） | 库里没有时联网核实 | 封面 |
 | --- | --- | --- | --- |
-| 影视 | IMDb 非商业数据集，3 万多部 | 不需要 | 豆瓣，维基百科（按 IMDb 编号） |
+| 影视 | IMDb 非商业数据集，4.6 万部，其中 3.2 万部有中文名 | TMDB（填了 Key 时），豆瓣 | TMDB（按 IMDb 编号），豆瓣，维基百科 |
 | 书 | Wikidata（CC0）里的知名作品，含中文作品 | 豆瓣读书，iTunes Books | 豆瓣，维基百科，Open Library |
 | 音乐（以专辑为单位） | Wikidata 里的知名专辑，含华语、日韩 | iTunes | 维基百科，Cover Art Archive，iTunes |
 
@@ -88,7 +94,8 @@ curl -LO https://huggingface.co/XHToken/Spark-X2.5-4B-GGUF/resolve/main/Spark-X2
 curl -LO https://huggingface.co/XHToken/Spark-X2.5-1.7B-GGUF/resolve/main/Spark-X2.5-1.7B-Q4_K_M.gguf
 cd ..
 
-# 2. 片库（下载 IMDb 非商业数据集约 1.9 GB，生成 29 MB 的 data/catalog.sqlite）
+# 2. 片库（下载 IMDb 非商业数据集约 1.9 GB，生成 43 MB 的 data/catalog.sqlite）
+#    评分人数 3000 以上的都收；有中文译名的放宽到 300，华语片在 IMDb 上评分的人少
 #    书库和曲库（从 Wikidata 拉取，生成 data/library.sqlite；没有它也能用，书和音乐只靠联网核实）
 mkdir -p data/raw && cd data/raw
 for f in title.basics title.ratings title.akas title.crew title.principals name.basics; do
@@ -104,6 +111,63 @@ cd ../app
 npm install
 PIANKE_PYTHON=$(which python) npm run dev
 ```
+
+两个本机模型在第一次用到时才加载，打开应用不占内存；设 `PIANKE_PRELOAD=1` 可以在启动时就加载。
+
+模型名称、每次用时、读入的 token 数和读入速度图平时不显示，在「设置 → 模型」里打开「演示模式」后出现。
+
+### 用 OpenAI 兼容接口代替本机模型
+
+内存不够或不想下载模型时，在「设置 → 模型」里切到「OpenAI 兼容接口」，填接口地址（一般以 `/v1` 结尾）、API Key 和模型名。OpenAI、DeepSeek、OpenRouter 和本机的 Ollama、LM Studio 都可以用，这时第 1 步的模型和 llama.cpp 都不需要。不同服务支持的参数不一样，片刻会根据接口返回的 400 错误自动去掉或改名不支持的参数，结构化输出从 `json_schema` 依次退到 `json_object` 和纯提示词。
+
+设置存在 `~/Library/Application Support/Pianke/settings.json`（权限 600），不在记忆文件里，清空记忆和导出都不会带上 API Key。用远程接口时，你的话、记录和口味画像会在聊天和推荐时发给那个服务，界面上的隐私说明会随之改变；接口在本机（localhost）时仍然算作不出这台 Mac。
+
+### 联网服务（可选）
+
+「设置 → 联网服务」里可以填：
+
+- **TMDB API Key**：电影海报按 IMDb 编号直接从 TMDB 取，一次请求，比按片名搜豆瓣快得多。在 themoviedb.org 免费申请，v3 Key 和 v4 Read Access Token 都可以。没填时仍用豆瓣和维基百科。
+- **Exa 或 Tavily**：填了搜索 Key 后，推荐会多做三件事：定方向时模型写一两个搜索词，从结果里找新作和冷门作品，再和其他候选一样核实；书库、豆瓣、iTunes 都查不到的书和专辑，用搜索核实是否存在；挑好之后搜每一部的评价，把推荐理由改写得更具体。每次推荐多 3 到 5 次搜索和两次模型调用。
+
+专辑封面先查网易云音乐（不需要 Key，约 0.2 秒一张），再查维基百科、Cover Art Archive 和 iTunes。启动时会在后台把你的记录和最近推荐过的作品的封面先取下来。
+
+### 打包成 Mac 应用
+
+```bash
+cd app
+PIANKE_PYTHON=$(which python3.11) npm run dist
+```
+
+依次做三件事：用 PyInstaller 把 Python 后端打成独立程序（`scripts/build-backend.sh`，用自己的 `backend/.venv`，不改动你的 Python 环境）；用 electron-builder 生成 `release/mac-arm64/片刻.app`；用 macOS 自带的 hdiutil 生成 `release/片刻-0.1.0-arm64.dmg`（`scripts/make-dmg.sh`）。打开 dmg，把「片刻」拖进「应用程序」即可。
+
+安装包约 400 MB，包含界面、后端、片库和书库，不含模型。用本机模式时，把两个 gguf 放进 `~/Library/Application Support/Pianke/models/`，或者在那里建一个指向已有模型目录的链接；用 OpenAI 兼容接口时不需要模型。后端日志在同目录的 `backend.log`。应用没有签名，只在打包的这台 Mac 上直接打开；拷到别的 Mac 上要右键选「打开」。
+
+### 发布更新
+
+装好的片刻启动后和之后每 6 小时读一次 GitHub Releases 上最新的 `latest.json`。有新版本时，侧栏「设置」旁边亮一个蓝点，设置页顶部可以下载。应用分四部分，各有一个指纹，只下载指纹变了的部分：
+
+| 部分 | 内容 | 压缩后 |
+| --- | --- | --- |
+| app | 界面和主进程（app.asar） | 约 1.3 MB |
+| backend-src | 后端的 Python 源码 | 约 0.06 MB |
+| runtime | 冻结的 Python 和第三方库 | 约 19 MB，只在依赖变了时下载 |
+| data | 片库和书库 | 约 24 MB，只在重建片库后下载 |
+
+下载完点「重启并更新」，片刻退出，一个小脚本把这几部分换进 `片刻.app`，再重新打开。Electron 版本变了的更新要下载完整 dmg。没有用 electron-updater：它在 Mac 上要求应用签名。
+
+发一个新版本：
+
+```bash
+cd app
+# 1. 把 package.json 的 version 改大，比如 0.1.0 → 0.1.1
+PIANKE_PYTHON=$(which python3.11) npm run dist            # 2. 打包
+npm run release -- --notes "这次改了什么"                    # 3. 生成 release/update/，先看一眼
+npm run release -- --notes "这次改了什么" --publish          # 4. 上传到 GitHub Releases
+```
+
+runtime 的指纹由 Python 版本、`pip freeze` 和后端用到的模块列表算出，不看文件本身（PyInstaller 每次打包的字节都不一样）。打包时会在冻结的环境里把后端每个模块导入一遍，缺库会在这一步报错。
+
+图标的源文件是 `app/scripts/icon.svg`，改了之后运行 `npx electron scripts/make-icon.mjs` 重新生成 `build/icon.icns`。
 
 用户数据只存在 `~/Library/Application Support/Pianke/user.sqlite`。同目录下的 `cache.sqlite` 和 `covers/` 只放公开的作品信息和封面，可以随时删除。
 
@@ -154,9 +218,9 @@ PIANKE_HOME=/tmp/pianke-demo PIANKE_DRIVE=scripts/drive/shelves.json PIANKE_SHOT
 
 ```
 backend/pianke/
-  llm/        llama-server 进程管理、带 JSON 语法约束的调用、每次调用的耗时记录
+  llm/        llama-server 进程管理（用时加载）、OpenAI 兼容接口、带 JSON 约束的调用、每次调用的耗时记录
   catalog/    片库（IMDb）、书库和曲库（Wikidata）：核实、条件检索、封面墙
-  lookup/     唯一联网的地方：按作品名查书、专辑和封面，结果缓存在本机
+  lookup/     唯一联网的地方：按作品名查书、专辑和封面，联网搜索（web.py），结果缓存在本机
   memory/     L0–L2 的 SQLite 存储
   domains.py  三个书架的措辞、回访周期、“没看”的原因和它们写到哪里
   flows/      冷启动、推荐、看过 / 没看、回访、画像整理

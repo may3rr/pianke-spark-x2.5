@@ -181,47 +181,109 @@ def pass_(item_id: str, reason: str, words: str | None = None, rec_id: int | Non
     return {"item": it, "effect": effect, "reason": label}
 
 
-def set_status(item_id: str, status: str, words: str | None = None) -> dict:
-    it = store.upsert_item(item_id, status=status, words=words or None, source="rec")
+def set_status(item_id: str, status: str, words: str | None = None, source: str = "rec") -> dict:
+    it = store.upsert_item(item_id, status=status, words=words or None, source=source)
     store.event("status", {"id": item_id, "status": status, "words": words})
     return it
 
 
 # ---------------------------------------------------------------- check-ins
+#
+# The day after, 片刻 asks about what the user meant to get to:
+#   chosen   the pick they pressed "就看这部" on
+#   listed   picks they saved for later from a recommendation
+#   night    the latest night when they did nothing with any of the three:
+#            one question about the night, not one per pick
+# "还没顾上" snoozes a question for a shelf's check-in period (twice at most);
+# logging, passing or "别再问了" ends it.
+
+MAX_SNOOZES = 2
+
 
 def _asked() -> set[str]:
     return set(store.get_pref("checked", []))
 
 
+def chosen() -> dict[str, str]:
+    """rec id (as str) → the pick the user chose that night."""
+    return store.get_pref("chosen", {})
+
+
+def choose(rec_id: int, item_id: str) -> None:
+    ch = chosen()
+    ch[str(rec_id)] = item_id
+    store.set_pref("chosen", dict(list(ch.items())[-200:]))
+    store.event("choose", {"rec_id": rec_id, "id": item_id})
+
+
 def checkins(domain: str | None = None) -> list[dict]:
-    """Picks the user may have gotten to since: ones they put on the list
-    from a recommendation, and the latest night's picks when nothing was
-    done with them. Each is asked about once."""
     from ..domains import CHECKIN_DAYS
 
     asked = _asked()
-    out: list[dict] = []
+    snooze = store.get_pref("snooze", {})
+    nights_done = set(store.get_pref("nights_done", []))
+    ch = chosen()
     now = time.time()
+    out: list[dict] = []
     for dom in ([domain] if domain else list(CHECKIN_DAYS)):
         window = CHECKIN_DAYS[dom] * 86400
-        recs = [r for r in store.recs_since(now - window)
+        # snoozed questions can come back after the first window
+        recs = [r for r in store.recs_since(now - 3 * window)
                 if (r["request"].get("domain") or "film") == dom and now - r["ts"] > 4 * 3600]
         seen_ids: set[str] = set()
         for i, r in enumerate(recs):
-            states = {p["id"]: (store.item(p["id"]) or {}).get("status") for p in r["picks"]}
-            untouched = all(s is None for s in states.values())
-            for p in r["picks"]:
-                if p["id"] in asked or p["id"] in seen_ids:
+            ids = [p["id"] for p in r["picks"]]
+            its = {pid: store.item(pid) or {} for pid in ids}
+            states = {pid: its[pid].get("status") for pid in ids}
+            pick = ch.get(str(r["id"]))
+            for pid in ids:
+                if pid in asked or pid in seen_ids or snooze.get(pid, {}).get("until", 0) > now:
                     continue
-                s = states[p["id"]]
-                if s == "want" or (untouched and i == 0):
-                    seen_ids.add(p["id"])
-                    out.append({"id": p["id"], "domain": dom, "rec_id": r["id"], "ts": r["ts"],
-                                "on_list": s == "want", "title": catalog.get(p["id"])})
-    return [o for o in out if o["title"]][:4]
+                s = states[pid]
+                # a chosen pick is the night's question; otherwise the ones
+                # saved from this recommendation (works already on the list
+                # that it merely picked again are not this night's business)
+                if (pid == pick and s in (None, "want")) or (
+                        not pick and s == "want" and its[pid].get("source") == "rec"):
+                    seen_ids.add(pid)
+                    out.append({"kind": "item", "id": pid, "domain": dom, "rec_id": r["id"], "ts": r["ts"],
+                                "on_list": s == "want", "chosen": pid == pick,
+                                "snoozed": snooze.get(pid, {}).get("n", 0),
+                                "title": catalog.get(pid)})
+            untouched = not pick and all(s is None for s in states.values())
+            if (i == 0 and untouched and r["id"] not in nights_done and now - r["ts"] < window
+                    and not any(pid in asked for pid in ids)):
+                titles = [t for t in (catalog.get(pid) for pid in ids) if t]
+                if titles:
+                    out.append({"kind": "night", "id": f"night:{r['id']}", "domain": dom, "rec_id": r["id"],
+                                "ts": r["ts"], "titles": titles})
+    return [o for o in out if o.get("title") or o.get("titles")][:4]
 
 
 def dismiss_checkin(item_id: str) -> None:
     asked = _asked()
     asked.add(item_id)
     store.set_pref("checked", sorted(asked)[-500:])
+
+
+def snooze_checkin(item_id: str) -> dict:
+    """"还没顾上": ask again after the shelf's check-in period; after two
+    snoozes the question goes away on its own."""
+    from ..domains import CHECKIN_DAYS
+
+    sn = store.get_pref("snooze", {})
+    n = sn.get(item_id, {}).get("n", 0) + 1
+    if n > MAX_SNOOZES:
+        dismiss_checkin(item_id)
+        sn.pop(item_id, None)
+        store.set_pref("snooze", sn)
+        return {"again": False}
+    days = CHECKIN_DAYS[store.domain_of(item_id)]
+    sn[item_id] = {"until": time.time() + days * 86400, "n": n}
+    store.set_pref("snooze", dict(list(sn.items())[-300:]))
+    return {"again": True, "days": days}
+
+
+def dismiss_night(rec_id: int) -> None:
+    done = store.get_pref("nights_done", [])
+    store.set_pref("nights_done", (done + [rec_id])[-200:])

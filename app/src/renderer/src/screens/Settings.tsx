@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { get, post, put, type Status } from '../lib/api'
+import { get, post, put, type LlmSettings, type Status } from '../lib/api'
+import { modelDot, modelStatusLabel } from '../lib/models'
+import { hasUpdate, mb, useUpdate } from '../lib/update'
+import { setDemo, useDemo } from '../lib/demo'
 import { BooksFillIcon, CpuFillIcon, GearFillIcon, LockFillIcon, Tile, WifiSlashFillIcon } from '../components/Icons'
 
 interface Usage {
@@ -14,10 +17,11 @@ interface Usage {
 
 const gb = (b: number | null) => (b ? `${(b / 1e9).toFixed(1)} GB` : '')
 
-export default function Settings({ status, onReset }: { status: Status; onReset: () => void }) {
+export default function Settings({ status, onReset, embedded = false }: { status: Status; onReset: () => void; embedded?: boolean }) {
   const [usage, setUsage] = useState<Usage | null>(null)
   const [confirm, setConfirm] = useState(false)
   const [coversOn, setCoversOn] = useState(status.covers_online)
+  const demo = useDemo()
   useEffect(() => {
     get<Usage>('/usage').then(setUsage).catch(() => {})
   }, [])
@@ -26,14 +30,16 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
   const maxTps = Math.max(1, ...(usage?.bench?.rows.map((r) => r.prompt_tps) ?? [1]))
   return (
     <>
-      <div className="top-strip drag-strip bar-solid" />
+      {!embedded && <div className="top-strip drag-strip bar-solid" />}
       <div className="settings-col rise-in">
         <span className="page-icon">
           <Tile color="var(--tile-grey)" size={56} icon={<GearFillIcon size={30} />} />
         </span>
         <h1 className="page-title">设置</h1>
+        <UpdateCard />
 
-        <h2 className="section-h">本机模型</h2>
+        <h2 className="section-h">模型</h2>
+        <ModelSource llm={status.llm} onSaved={onReset} />
         <div className="set-card">
           {status.models.map((m) => {
             const u = usage?.by_model.find((x) => x.model === m.name)
@@ -44,9 +50,11 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                   <div style={{ fontWeight: 500 }}>{m.name}</div>
                   <div className="t13 secondary">
                     {m.key === 'big' ? '定方向、挑片、整理口味画像' : '把你说的话整理成记录'}
-                    {`。${m.file}，${gb(m.size_bytes)}，上下文 ${(m.ctx / 1024).toFixed(0)}K`}
+                    {m.provider === 'api'
+                      ? `。经 ${m.host} 调用`
+                      : `。${[m.file, gb(m.size_bytes), `上下文 ${(m.ctx / 1024).toFixed(0)}K`, '用到时才加载'].filter(Boolean).join('，')}`}
                   </div>
-                  {u && (
+                  {u && demo && (
                     <div className="t13 secondary">
                       调用 {u.calls} 次，读入 {u.prompt_tokens.toLocaleString()} 个 token，生成 {u.completion_tokens.toLocaleString()} 个，平均每秒生成 {u.avg_gen_tps} 个
                     </div>
@@ -54,15 +62,26 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
                   {m.error && <div className="t13 danger">{m.error}</div>}
                 </div>
                 <span className="set-val flex items-center" style={{ gap: 6 }}>
-                  <span className={`status-dot ${m.status === 'ready' ? 'ready' : m.status === 'loading' ? 'loading' : 'error'}`} />
-                  {m.status === 'ready' ? '运行中' : m.status === 'loading' ? '加载中' : '不可用'}
+                  <span className={`status-dot ${modelDot(m)}`} />
+                  {m.provider === 'api' ? (m.status === 'ready' ? '接口' : '未配置') : m.status === 'ready' ? '运行中' : modelStatusLabel(m)}
                 </span>
               </div>
             )
           })}
+          <div className="set-row">
+            <div className="set-main">
+              <div style={{ fontWeight: 500 }}>演示模式</div>
+              <div className="t13 secondary">
+                打开后，推荐页、画像页和这里会写出模型名称、用时和读入的 token 数，方便演示模型在本机运行。平时用不到。
+              </div>
+            </div>
+            <button className={`switch${demo ? ' on' : ''}`} role="switch" aria-checked={demo} onClick={() => setDemo(!demo)} data-demo>
+              <span />
+            </button>
+          </div>
         </div>
 
-        {usage?.bench && (
+        {demo && usage?.bench && (
           <>
             <h2 className="section-h">长记忆读入速度</h2>
             <div className="t13 secondary">
@@ -91,6 +110,9 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
             </div>
           </>
         )}
+
+        <h2 className="section-h">联网服务</h2>
+        <OnlineServices llm={status.llm} onSaved={onReset} />
 
         <h2 className="section-h">片库、书库和曲库</h2>
         <div className="set-card">
@@ -134,9 +156,10 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
           <div className="set-row">
             <Tile color="var(--tile-teal)" icon={<WifiSlashFillIcon size={13} />} />
             <div className="set-main">
-              <div style={{ fontWeight: 500 }}>联网只查作品，不带你的信息</div>
+              <div style={{ fontWeight: 500 }}>{status.llm.search_on ? '联网查作品，也联网搜索' : '联网只查作品，不带你的信息'}</div>
               <div className="t13 secondary">
-                片刻会按作品名去豆瓣、iTunes、Open Library 查封面，核实书名和专辑名。请求里只有作品名、作者或年份，没有你的话、评分和画像，也没有账号。
+                片刻会按作品名去 TMDB、豆瓣、网易云音乐、iTunes、Open Library 查封面，核实书名和专辑名，请求里只有作品名、作者或年份。
+                {status.llm.search_on && '开了联网搜索后，模型根据你这次的要求写出的搜索词会发给搜索服务。'}
               </div>
             </div>
           </div>
@@ -200,10 +223,338 @@ export default function Settings({ status, onReset }: { status: Status; onReset:
             )}
           </div>
         </div>
-        <div className="t13 secondary" style={{ margin: '48px 0 0', textAlign: 'center' }}>
-          片刻 0.1，Spark-X2.5 端侧模型创新挑战赛参赛作品
-        </div>
+        <VersionFooter />
       </div>
     </>
+  )
+}
+
+interface TestResult {
+  model: string
+  ok: boolean
+  answer?: string
+  seconds?: number
+  error?: string
+}
+
+/** Local Spark-X2.5, or any OpenAI-compatible endpoint. The key is write-only:
+ *  the backend keeps it and only ever sends back a hint. */
+function ModelSource({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }) {
+  const [mode, setMode] = useState(llm.mode)
+  const [baseUrl, setBaseUrl] = useState(llm.base_url)
+  const [key, setKey] = useState('')
+  const [big, setBig] = useState(llm.big_model)
+  const [small, setSmall] = useState(llm.small_model)
+  const [busy, setBusy] = useState<'' | 'save' | 'test'>('')
+  const [results, setResults] = useState<TestResult[] | null>(null)
+  const [err, setErr] = useState('')
+  const dirty =
+    mode !== llm.mode || baseUrl !== llm.base_url || key !== '' || big !== llm.big_model || small !== llm.small_model
+  const loopback = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(baseUrl)
+
+  const save = async (m = mode) => {
+    setBusy('save')
+    setErr('')
+    setResults(null)
+    try {
+      await put('/llm', {
+        mode: m,
+        base_url: baseUrl,
+        api_key: key === '' ? null : key,
+        big_model: big,
+        small_model: small,
+        ctx: llm.ctx,
+      })
+      setKey('')
+      onSaved()
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const test = async () => {
+    if (dirty) await save()
+    setBusy('test')
+    setResults(null)
+    try {
+      setResults((await post<{ results: TestResult[] }>('/llm/test')).results)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="set-card" style={{ padding: '12px 16px' }}>
+      <div className="seg">
+        {(
+          [
+            ['local', '本机 Spark-X2.5'],
+            ['api', 'OpenAI 兼容接口'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            className={mode === k ? 'on' : ''}
+            onClick={() => {
+              setMode(k)
+              // switching back to local needs nothing else; apply it at once
+              if (k === 'local' && llm.mode !== 'local') save('local')
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'local' ? (
+        <div className="t13 secondary" style={{ marginTop: 8 }}>
+          两个 Spark-X2.5 模型在本机运行，用到时才加载。你说的话不出这台 Mac。
+        </div>
+      ) : (
+        <>
+          <div className="t13 secondary" style={{ marginTop: 8 }}>
+            OpenAI、DeepSeek、OpenRouter 这类服务，或本机的 Ollama、LM Studio，只要兼容 OpenAI 的
+            /chat/completions 接口都可以用。
+          </div>
+          <label className="field">
+            <span className="field-label">接口地址</span>
+            <input
+              className="field-input"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              spellCheck={false}
+            />
+            <div className="field-hint">一般以 /v1 结尾。Ollama 填 http://localhost:11434/v1</div>
+          </label>
+          <label className="field">
+            <span className="field-label">API Key</span>
+            <input
+              className="field-input"
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder={llm.has_key ? `已保存（${llm.key_hint}），留空则不改` : loopback ? '本机服务一般不需要' : 'sk-...'}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <div className="field-hint">只存在本机的 settings.json 里，清空记忆和导出都不会带上它。</div>
+          </label>
+          <label className="field">
+            <span className="field-label">主模型</span>
+            <input
+              className="field-input"
+              value={big}
+              onChange={(e) => setBig(e.target.value)}
+              placeholder="gpt-4.1-mini、deepseek-chat、qwen3:8b"
+              spellCheck={false}
+            />
+            <div className="field-hint">访谈、定方向、挑选、整理口味画像。</div>
+          </label>
+          <label className="field">
+            <span className="field-label">轻量模型（可选）</span>
+            <input
+              className="field-input"
+              value={small}
+              onChange={(e) => setSmall(e.target.value)}
+              placeholder={big || '留空则和主模型相同'}
+              spellCheck={false}
+            />
+            <div className="field-hint">把你写的感受整理成记录，调用最频繁，可以用便宜快速的模型。</div>
+          </label>
+          {!loopback && baseUrl && (
+            <div className="t13" style={{ marginTop: 12, color: 'var(--text-secondary)' }}>
+              用这个接口时，你的话、记录和口味画像会在聊天和推荐时发给 {baseUrl.replace(/^https?:\/\//, '').split('/')[0]}
+              。片刻自己仍然只在本机保存它们。
+            </div>
+          )}
+          <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+            <button className="pill-sm" disabled={!dirty || !!busy} onClick={() => save()}>
+              {busy === 'save' ? '正在保存' : '保存'}
+            </button>
+            <button className="pill-sm" disabled={!baseUrl || !big || !!busy} onClick={test}>
+              {busy === 'test' ? '正在测试' : dirty ? '保存并测试' : '测试连接'}
+            </button>
+          </div>
+        </>
+      )}
+      {err && <div className="t13 danger" style={{ marginTop: 8 }}>{err}</div>}
+      {results?.map((r) => (
+        <div key={r.model} className={`t13 ${r.ok ? 'secondary' : 'danger'}`} style={{ marginTop: 8 }}>
+          {r.ok ? `${r.model} 可以用，${r.seconds} 秒回答了「${r.answer}」。` : `${r.model}：${r.error}`}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** TMDB for film posters, Exa or Tavily for web search. Keys are write-only. */
+function OnlineServices({ llm, onSaved }: { llm: LlmSettings; onSaved: () => void }) {
+  const [tmdb, setTmdb] = useState('')
+  const [provider, setProvider] = useState(llm.search_provider)
+  const [searchKey, setSearchKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const keyName = provider === 'exa' ? 'exa_key' : 'tavily_key'
+  const savedHint = provider ? llm.keys[keyName] : ''
+  const dirty = tmdb !== '' || searchKey !== '' || provider !== llm.search_provider
+
+  const saveAndTest = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      if (dirty) {
+        await put('/services', {
+          tmdb_key: tmdb === '' ? null : tmdb,
+          search_provider: provider,
+          ...(provider && searchKey !== '' ? { [keyName]: searchKey } : {}),
+        })
+        setTmdb('')
+        setSearchKey('')
+        onSaved()
+      }
+      const r = await post<{ tmdb?: boolean; search?: string }>('/services/test')
+      const parts = []
+      if (r.tmdb !== undefined) parts.push(r.tmdb ? 'TMDB 可以用' : 'TMDB 没查到海报，检查 Key')
+      if (r.search !== undefined) parts.push(r.search ? `搜索可以用，搜到「${r.search}」` : '搜索没有结果，检查 Key')
+      setNote(parts.join('；') || '已保存')
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="set-card" style={{ padding: '12px 16px' }}>
+      <label className="field" style={{ marginTop: 0 }}>
+        <span className="field-label">TMDB API Key（电影海报）</span>
+        <input
+          className="field-input"
+          type="password"
+          value={tmdb}
+          onChange={(e) => setTmdb(e.target.value)}
+          placeholder={llm.keys.tmdb_key ? `已保存（${llm.keys.tmdb_key}），留空则不改` : 'v3 API Key 或 v4 Read Access Token'}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <div className="field-hint">
+          按 IMDb 编号直接取海报，一次请求，比按片名搜豆瓣快得多。在 themoviedb.org 的账户设置里免费申请。没填时用豆瓣和维基百科。
+        </div>
+      </label>
+      <div className="field">
+        <span className="field-label">联网搜索</span>
+        <div className="seg">
+          {(
+            [
+              ['', '不用'],
+              ['exa', 'Exa'],
+              ['tavily', 'Tavily'],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} className={provider === k ? 'on' : ''} onClick={() => setProvider(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {provider && (
+        <label className="field">
+          <span className="field-label">{provider === 'exa' ? 'Exa' : 'Tavily'} API Key</span>
+          <input
+            className="field-input"
+            type="password"
+            value={searchKey}
+            onChange={(e) => setSearchKey(e.target.value)}
+            placeholder={savedHint ? `已保存（${savedHint}），留空则不改` : provider === 'exa' ? 'Exa API Key' : 'tvly-...'}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+      )}
+      <div className="field-hint" style={{ marginTop: 8 }}>
+        开了以后推荐会多做三件事：定方向时联网找新作和冷门作品；书库和网上都查不到的书、专辑，用搜索核实是否存在；挑好之后搜它们的评价，把理由写得更具体。每次推荐多 3 到 5 次搜索和两次模型调用。
+      </div>
+      <div className="flex items-center" style={{ gap: 8, marginTop: 12 }}>
+        <button className="pill-sm" disabled={busy || (!dirty && !llm.keys.tmdb_key && !llm.search_on)} onClick={saveAndTest}>
+          {busy ? '正在测试' : dirty ? '保存并测试' : '测试'}
+        </button>
+        {note && <span className="t13 secondary">{note}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** Shown at the top of Settings while there is an update to act on. */
+function UpdateCard() {
+  const u = useUpdate()
+  if (!hasUpdate(u) && u.status !== 'error') return null
+  if (u.status === 'error' && !u.version) return null
+  return (
+    <div className="set-card update-card" style={{ padding: '12px 16px', marginBottom: 8 }}>
+      <div className="flex items-center" style={{ gap: 12 }}>
+        <span className="update-dot" style={{ marginLeft: 0 }} />
+        <div className="set-main">
+          <div style={{ fontWeight: 500 }}>
+            {u.status === 'ready' ? `${u.version} 已下载好` : `有新版本 ${u.version}`}
+            <span className="secondary" style={{ fontWeight: 400 }}>{`，当前 ${u.current}`}</span>
+          </div>
+          <div className="t13 secondary">
+            {u.status === 'available' && `只需下载有变化的部分，共 ${mb(u.size)}。`}
+            {u.status === 'downloading' && `正在下载 ${mb(u.received)} / ${mb(u.size)}`}
+            {u.status === 'ready' && '重启片刻就会换上新版本，你的记录不受影响。'}
+            {u.status === 'full' && '这个版本换了底层运行环境，需要下载完整安装包。'}
+            {u.status === 'error' && u.error}
+          </div>
+          {u.notes && u.status !== 'downloading' && (
+            <div className="t13" style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{u.notes}</div>
+          )}
+        </div>
+        {u.status === 'available' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.download()} data-update-download>
+            下载更新
+          </button>
+        )}
+        {u.status === 'ready' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.apply()} data-update-apply>
+            重启并更新
+          </button>
+        )}
+        {u.status === 'full' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.openPage()}>
+            去下载
+          </button>
+        )}
+        {u.status === 'error' && (
+          <button className="pill-sm" onClick={() => window.pianke.update.check()}>
+            重试
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function VersionFooter() {
+  const u = useUpdate()
+  const note =
+    u.status === 'checking' ? '正在检查更新' : u.status === 'none' ? '已是最新版本' : u.status === 'error' ? '检查更新失败' : ''
+  return (
+    <div className="t13 secondary" style={{ margin: '48px 0 0', textAlign: 'center' }}>
+      片刻 {u.current}，Spark-X2.5 端侧模型创新挑战赛参赛作品
+      {u.current && (
+        <>
+          {' · '}
+          {note || (
+            <button className="link-accent t13" onClick={() => window.pianke.update.check()}>
+              检查更新
+            </button>
+          )}
+        </>
+      )}
+    </div>
   )
 }

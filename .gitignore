@@ -33,3 +33,8 @@ presentation/out/*.mp4
 .env.*
 *.pem
 *.key
+
+# frozen backend for the packaged app (app/scripts/build-backend.sh)
+app/build/backend/
+# pip install . in build-backend.sh leaves this behind
+backend/build/

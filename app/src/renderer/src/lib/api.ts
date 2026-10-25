@@ -61,10 +61,14 @@ export interface Quote {
 export interface Pick extends Title {
   reason: string
   because: Quote[]
+  /** the user had saved it to their list before this recommendation */
+  on_list?: boolean
 }
 
 export interface RecResult {
   rec_id: number | null
+  /** the pick the user pressed 就看这部 on */
+  chosen?: string | null
   domain?: Domain
   direction: string
   picks: Pick[]
@@ -92,19 +96,41 @@ export interface Profile {
     seconds?: number
     prompt_tps?: number
     gen_tps?: number
-    diff?: { added: number; removed: number; kept: number }
+    model?: string
+    diff?: { added: number; removed: number; kept: number; added_texts?: string[] }
   }
 }
 
 export interface ModelState {
   key: 'big' | 'small'
   name: string
+  provider: 'local' | 'api'
+  host: string
   file: string
-  status: 'stopped' | 'loading' | 'ready' | 'missing' | 'error'
+  /** idle: local model not loaded yet, loads on first use */
+  status: 'stopped' | 'idle' | 'loading' | 'ready' | 'missing' | 'error'
   error: string | null
   ctx: number
   size_bytes: number | null
   load_seconds: number | null
+}
+
+/** Which models answer; the API key itself never leaves the backend. */
+export interface LlmSettings {
+  mode: 'local' | 'api'
+  base_url: string
+  big_model: string
+  small_model: string
+  ctx: number
+  has_key: boolean
+  key_hint: string
+  /** hints for the other saved keys, '' when unset */
+  keys: { tmdb_key: string; exa_key: string; tavily_key: string }
+  search_provider: '' | 'exa' | 'tavily'
+  search_on: boolean
+  host: string
+  /** false when the user's words go to a server off this Mac */
+  on_device: boolean
 }
 
 export type Counts = Record<'watched' | 'dropped' | 'want' | 'rejected', number>
@@ -117,6 +143,7 @@ export interface PassReason {
 
 export interface Status {
   models: ModelState[]
+  llm: LlmSettings
   catalog: { available: boolean; total?: string; with_zh?: string; built_at?: string; source?: string; count_movie?: string; count_series?: string; count_miniseries?: string }
   library: { available: boolean; count_book?: string; count_album?: string; built_at?: string; source?: string }
   onboarded: boolean
@@ -128,6 +155,12 @@ export interface Status {
   counts: Counts
   profile_version: number | null
   stale: number
+  /** background consolidation is running */
+  profile_auto: boolean
+  /** a profile rewritten in the background the user hasn't opened yet */
+  profile_unseen: boolean
+  /** had the full talk (habits, things to avoid); first runs end at the wall */
+  talked: boolean
   data_path: string
 }
 

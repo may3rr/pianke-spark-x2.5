@@ -1595,3 +1595,318 @@
 .switch.on span {
   transform: translateX(16px);
 }
+
+label.field {
+  display: block;
+}
+
+/* a new version is out: blue dot on the sidebar's settings row */
+.update-dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+/* text boxes grow with what's typed, up to a limit, then scroll */
+.chat-input,
+.compose-input,
+.fb-input,
+.claim-edit {
+  field-sizing: content;
+  overflow-y: auto;
+}
+.compose-input,
+.fb-input {
+  max-height: 320px;
+}
+.chat-input {
+  max-height: 200px;
+}
+/* 跳过 sits beside the 44px input and 发送 at the same height */
+.chat-skip {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  flex: none;
+}
+
+/* a recommended title and its copy button */
+.pick-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.copy-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex: none;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+.copy-btn:hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------- product review pass */
+
+/* result actions: a state that has happened reads as text, not a button */
+.pick-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.pick-chosen {
+  color: var(--ok-text);
+  font-weight: 500;
+}
+
+/* running: elapsed and typical time */
+.run-time {
+  margin-top: 8px;
+}
+
+/* the optional talk, offered on the recommend page */
+.talk-card {
+  width: 100%;
+  margin-bottom: 40px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+/* check-in: one question about a night, three covers to tap */
+.checkin-covers {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.checkin-cover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 72px;
+  text-align: left;
+  border-radius: 6px;
+  transition: transform 160ms var(--ease);
+}
+.checkin-cover:hover {
+  transform: translateY(-2px);
+}
+.checkin-cover-name {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.checkin-q .secondary {
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+/* cover wall: the cover is 喜欢, the corner ✕ is 不喜欢 */
+.wall-tile {
+  position: relative;
+}
+.wall-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  min-width: 0;
+}
+.wall-tile:hover .wall-cover {
+  transform: translateY(-2px);
+}
+.wall-nope {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: var(--glass-shadow);
+  opacity: 0;
+  transition:
+    opacity 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+.wall-tile.small .wall-nope {
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+}
+.wall-tile:hover .wall-nope,
+.wall-nope:focus-visible,
+.wall-nope.on {
+  opacity: 1;
+}
+.wall-tile:hover .wall-nope {
+  transform: translateY(-2px);
+}
+.wall-nope.on {
+  color: var(--on-brand);
+  background: var(--tile-grey);
+}
+.wall-tile.love .wall-nope {
+  opacity: 0;
+}
+.wall-tile.love:hover .wall-nope {
+  opacity: 1;
+}
+@media (hover: none) {
+  .wall-nope {
+    opacity: 1;
+  }
+}
+
+/* sidebar */
+.side-key {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.side-spin {
+  margin-left: auto;
+  display: flex;
+}
+.model-line {
+  width: 100%;
+  border-radius: 8px;
+  text-align: left;
+  transition: background 160ms var(--ease);
+}
+.model-line:hover {
+  background: var(--fill);
+}
+
+/* profile: what a background rewrite added */
+.claim-new {
+  color: var(--ok-text);
+}
+
+/* undo toast, centred over the content area */
+.toast {
+  position: fixed;
+  z-index: 40;
+  bottom: 24px;
+  left: 240px;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  font-size: 15px;
+  animation: cc-rise 240ms var(--ease) both;
+}
+.toast-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ⌘K */
+.qf-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 96px;
+  animation: cc-fade 160ms var(--ease) both;
+}
+.qf {
+  width: 640px;
+  max-width: calc(100vw - 96px);
+  max-height: calc(100vh - 192px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  overflow: hidden;
+  animation: cc-rise 240ms var(--ease) both;
+}
+.qf-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  box-shadow: 0 1px 0 var(--separator);
+}
+.qf-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+}
+.qf-input::placeholder {
+  color: var(--text-secondary);
+}
+.qf-body {
+  overflow-y: auto;
+  padding: 8px;
+}
+.qf-note {
+  padding: 12px 8px;
+}
+.qf-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+}
+.qf-row:hover {
+  background: var(--fill);
+}
+.qf-row.open {
+  align-items: flex-start;
+  background: var(--bg-subtle);
+}
+.qf-main {
+  flex: 1;
+  min-width: 0;
+}
+.qf-name {
+  font-size: 17px;
+}
+.qf-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.qf-row .log-panel {
+  background: var(--bg);
+}

@@ -12,19 +12,23 @@ const HEAD: Record<Domain, string> = {
   music: '哪些专辑你听过、而且喜欢？',
 }
 
-/** Cold start, step one: recognise rather than recall. Tap once for "喜欢",
- * twice for "不喜欢", a third time to clear. Works the user hasn't seen are
- * simply left alone — no answer is needed for them. */
+/** Cold start, step one: recognise rather than recall. A tap on a cover is
+ * "喜欢" (tap again to clear); the ✕ in its corner is "不喜欢". Each mark has
+ * a control the user can see, so nobody has to remember a tap count. Works
+ * the user hasn't seen are simply left alone. */
 export default function CoverWall({
   domain,
   onDone,
   onSkip,
   doneLabel = '继续',
+  step,
 }: {
   domain: Domain
   onDone: (marks: Record<string, Mark>) => void
   onSkip?: () => void
   doneLabel?: string
+  /** "第 1 个书架，共 2 个" when the first run walks several walls */
+  step?: string
 }) {
   const c = DOMAINS[domain]
   const [page, setPage] = useState(0)
@@ -73,14 +77,15 @@ export default function CoverWall({
     return () => clearTimeout(id)
   }, [q, domain])
 
-  const tap = (id: string) =>
+  const toggle = (id: string, to: Mark) =>
     setMarks((m) => {
       const n = { ...m }
-      if (!n[id]) n[id] = 'love'
-      else if (n[id] === 'love') n[id] = 'dislike'
-      else delete n[id]
+      if (n[id] === to) delete n[id]
+      else n[id] = to
       return n
     })
+  const tap = (id: string) => toggle(id, 'love')
+  const nope = (id: string) => toggle(id, 'dislike')
 
   const loved = Object.values(marks).filter((m) => m === 'love').length
   const disliked = Object.values(marks).filter((m) => m === 'dislike').length
@@ -102,8 +107,9 @@ export default function CoverWall({
           <h1 className="t26 onboard-h" style={{ textAlign: 'left', margin: 0 }}>
             {HEAD[domain]}
           </h1>
+          {step && <div className="t13 secondary" style={{ marginBottom: 8 }}>{step}</div>}
           <p className="secondary" style={{ margin: '8px 0 0' }}>
-            点一下是喜欢，点两下是不喜欢。没{c.verb}过的不用管。挑出几{c.unit}就够，片刻会接着问你为什么。
+            点封面是喜欢；{c.verb}过但不喜欢的，点封面角上的 ✕。没{c.verb}过的不用管，挑出几{c.unit}就够。
           </p>
           <div className="wall-search">
             <MagnifierIcon size={14} />
@@ -118,7 +124,7 @@ export default function CoverWall({
           {hits.length > 0 && (
             <div className="wall-hits">
               {hits.map((h) => (
-                <WallTile key={h.id} t={h} mark={marks[h.id]} onTap={() => tap(h.id)} small />
+                <WallTile key={h.id} t={h} mark={marks[h.id]} onTap={() => tap(h.id)} onNope={() => nope(h.id)} small />
               ))}
             </div>
           )}
@@ -127,7 +133,7 @@ export default function CoverWall({
               <span className="t13 secondary">已经选的：</span>
               {extra.map((id) =>
                 known[id] ? (
-                  <button key={id} className={`wall-chip ${marks[id]}`} onClick={() => tap(id)}>
+                  <button key={id} className={`wall-chip ${marks[id]}`} onClick={() => toggle(id, marks[id])} title="点一下取消">
                     {marks[id] === 'love' ? <HeartFillIcon size={11} /> : <XmarkIcon size={11} />}
                     {known[id].name}
                   </button>
@@ -143,12 +149,14 @@ export default function CoverWall({
                 </div>
               ))}
             {batch?.map((t, i) => (
-              <WallTile key={t.id} t={t} mark={marks[t.id]} onTap={() => tap(t.id)} delay={i * 18} />
+              <WallTile key={t.id} t={t} mark={marks[t.id]} onTap={() => tap(t.id)} onNope={() => nope(t.id)} delay={i * 18} />
             ))}
           </div>
           {batch && batch.length === 0 && (
             <div className="empty-note secondary">
-              {domain === 'film' ? '片库没有准备好。' : '书库和曲库还没有生成，可以用上面的搜索框按名字找。'}
+              {domain === 'film'
+                ? '片库还没有生成。在 backend 里运行 python scripts/build_catalog.py 可以生成；现在可以用上面的搜索框按片名找。'
+                : '书库和曲库还没有生成，可以用上面的搜索框按名字找。'}
             </div>
           )}
         </div>
@@ -182,30 +190,47 @@ function WallTile({
   t,
   mark,
   onTap,
+  onNope,
   delay = 0,
   small = false,
 }: {
   t: Title
   mark?: Mark
   onTap: () => void
+  onNope: () => void
   delay?: number
   small?: boolean
 }) {
   return (
-    <button
-      className={`wall-tile${mark ? ` ${mark}` : ''}${small ? ' small' : ''}`}
-      onClick={onTap}
-      style={{ animationDelay: `${delay}ms` }}
-      aria-pressed={!!mark}
-      aria-label={`${t.name}${mark === 'love' ? '，喜欢' : mark === 'dislike' ? '，不喜欢' : ''}`}
-      data-wall={t.id}
-    >
-      <span className="wall-cover">
-        <Cover t={t} width={small ? 72 : 120} />
-        {mark && <span className="wall-badge">{mark === 'love' ? <HeartFillIcon size={14} /> : <XmarkIcon size={14} />}</span>}
-      </span>
-      <span className="wall-name">{t.name}</span>
-      {!small && t.year ? <span className="wall-year">{t.year}</span> : null}
-    </button>
+    <div className={`wall-tile${mark ? ` ${mark}` : ''}${small ? ' small' : ''}`} style={{ animationDelay: `${delay}ms` }}>
+      <button
+        className="wall-hit"
+        onClick={onTap}
+        aria-pressed={mark === 'love'}
+        aria-label={`${t.name}${mark === 'love' ? '，喜欢' : mark === 'dislike' ? '，不喜欢' : ''}`}
+        data-wall={t.id}
+      >
+        <span className="wall-cover">
+          <Cover t={t} width={small ? 72 : 120} />
+          {mark === 'love' && (
+            <span className="wall-badge">
+              <HeartFillIcon size={14} />
+            </span>
+          )}
+        </span>
+        <span className="wall-name">{t.name}</span>
+        {!small && t.year ? <span className="wall-year">{t.year}</span> : null}
+      </button>
+      <button
+        className={`wall-nope${mark === 'dislike' ? ' on' : ''}`}
+        onClick={onNope}
+        aria-pressed={mark === 'dislike'}
+        aria-label={`${t.name}，不喜欢`}
+        title={mark === 'dislike' ? '取消不喜欢' : '不喜欢'}
+        data-wall-nope={t.id}
+      >
+        <XmarkIcon size={small ? 10 : 12} />
+      </button>
+    </div>
   )
 }

@@ -22,8 +22,8 @@ function Fill({
 export function MoonFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M14.6 2.6a.9.9 0 0 0-1.1 1.1 7.6 7.6 0 0 1-9.8 9.8.9.9 0 0 0-1.1 1.1A10 10 0 1 0 14.6 2.6z" />
-      <path d="M18.6 3.2l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5zM21 8.6l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z" />
+      <path d="M14.1 2.1a.9.9 0 0 0-1.1 1.1 7.6 7.6 0 0 1-9.8 9.8.9.9 0 0 0-1.1 1.1A10 10 0 1 0 14.1 2.1z" />
+      <path d="M18.1 2.7l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5zM20.5 8.1l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z" />
     </Fill>
   )
 }
@@ -50,19 +50,22 @@ export function CheckCircleFillIcon(p: IconProps) {
 export function SparklesFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M10 3.5l1.6 4.6a3 3 0 0 0 1.8 1.8l4.6 1.6-4.6 1.6a3 3 0 0 0-1.8 1.8L10 19.5l-1.6-4.6a3 3 0 0 0-1.8-1.8L2 11.5l4.6-1.6a3 3 0 0 0 1.8-1.8z" />
-      <path d="M18.5 2l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7zM18.5 15.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" />
+      <path d="M10.35 4.6l1.6 4.6a3 3 0 0 0 1.8 1.8l4.6 1.6-4.6 1.6a3 3 0 0 0-1.8 1.8l-1.6 4.6-1.6-4.6a3 3 0 0 0-1.8-1.8l-4.6-1.6 4.6-1.6a3 3 0 0 0 1.8-1.8z" />
+      <path d="M18.85 3.1l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7zM18.85 16.6l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" />
     </Fill>
   )
 }
 
 export function GearFillIcon(p: IconProps) {
+  // six teeth around (12, 12); the thin stroke rounds the tooth corners
   return (
     <Fill {...p}>
       <path
         fillRule="evenodd"
-        d="M10.3 2h3.4l.5 2.6c.6.2 1.1.5 1.6.9l2.5-.9 1.7 3-2 1.7a6.6 6.6 0 0 1 0 1.8l2 1.7-1.7 3-2.5-.9c-.5.4-1 .7-1.6.9l-.5 2.6h-3.4l-.5-2.6a6.8 6.8 0 0 1-1.6-.9l-2.5.9-1.7-3 2-1.7a6.6 6.6 0 0 1 0-1.8l-2-1.7 1.7-3 2.5.9c.5-.4 1-.7 1.6-.9zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"
-        transform="translate(0 0.5)"
+        stroke={p.color ?? 'currentColor'}
+        strokeWidth={0.9}
+        strokeLinejoin="round"
+        d="M9.62 4.47L10.14 1.97L13.86 1.97L14.38 4.47A7.9 7.9 0 0 1 17.34 6.18L19.76 5.38L22.03 8.60L19.71 10.29A7.9 7.9 0 0 1 19.71 13.71L22.03 15.40L19.76 18.62L17.34 17.82A7.9 7.9 0 0 1 14.38 19.53L13.86 22.03L10.14 22.03L9.62 19.53A7.9 7.9 0 0 1 6.66 17.82L4.24 18.62L1.97 15.40L4.29 13.71A7.9 7.9 0 0 1 4.29 10.29L1.97 8.60L4.24 5.38L6.66 6.18A7.9 7.9 0 0 1 9.62 4.47ZM12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 1 0 0-7.2z"
       />
     </Fill>
   )
@@ -112,7 +115,7 @@ export function WifiSlashFillIcon(p: IconProps) {
 export function BooksFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M3 3.5h4a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zm6.5 0h4a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zm7.2 1.3l3.8-1a1 1 0 0 1 1.2.7l3.7 14.1-.1.1a1 1 0 0 1-.6 1.1l-3.9 1a1 1 0 0 1-1.2-.7l-3.6-14.1a1 1 0 0 1 .7-1.2z" transform="scale(0.92) translate(0.5 1)" />
+      <path d="M4.9 4.5h2.6a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4.9a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1zm5.4 0h2.6a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-2.6a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1zm3.6 3.26l3.72-.79 2.5 11.74-3.72.79z" />
     </Fill>
   )
 }
@@ -120,7 +123,7 @@ export function BooksFillIcon(p: IconProps) {
 export function QuoteFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M4 13.5C4 9 6.5 6 10 5l.7 1.6C8.6 7.5 7.4 9 7.2 11H10v7H4zm9.5 0c0-4.5 2.5-7.5 6-8.5l.7 1.6c-2.1.9-3.3 2.4-3.5 4.4h2.8v7h-6z" />
+      <path d="M4 14C4 9.5 6.5 6.5 10 5.5l.7 1.6C9.1 8 7.9 9.5 7.7 11.5H10v7H4zm9.5 0c0-4.5 2.5-7.5 6-8.5l.7 1.6c-2.1.9-3.3 2.4-3.5 4.4h2.8v7h-6z" />
     </Fill>
   )
 }
@@ -136,15 +139,17 @@ export function PlusIcon(p: IconProps) {
 export function XmarkIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M6.4 5l5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z" />
+      <path d="M4.5 4.5h2.9l12.1 12.1v2.9h-2.9L4.5 7.4zM19.5 4.5v2.9L7.4 19.5H4.5v-2.9L16.1 4.5z" />
     </Fill>
   )
 }
 
 export function PencilFillIcon(p: IconProps) {
+  // 45° pencil in three pieces: graphite tip, white band, body — the band
+  // sits right behind the tip, not mid-pencil
   return (
     <Fill {...p}>
-      <path d="M16.2 3.3a2 2 0 0 1 2.8 0l1.7 1.7a2 2 0 0 1 0 2.8L9 19.5l-4.9 1.4 1.4-4.9zM14.8 6.1L6.9 14l3.1 3.1 7.9-7.9z" />
+      <path d="M4.3 20.5l.85-3.96 3.11 3.11zM6.49 15.2l9.97-9.98 1.7-1.7 1.42 4.82-9.98 9.97z" />
     </Fill>
   )
 }
@@ -152,7 +157,7 @@ export function PencilFillIcon(p: IconProps) {
 export function ArrowClockwiseIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M12 4a8 8 0 0 1 7.2 4.5V5h2v7h-7v-2h3.6A6 6 0 1 0 18 14h2.1A8 8 0 1 1 12 4z" />
+      <path d="M19.8 9.16A8.3 8.3 0 1 1 16.64 5.12L15.52 6.78A6.3 6.3 0 1 0 17.92 9.85zM15.34 8.02L20.06 9.24 18.04 4.8z" />
     </Fill>
   )
 }
@@ -168,7 +173,7 @@ export function PersonFillIcon(p: IconProps) {
 export function HandThumbDownFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M8 3h8.8a3 3 0 0 1 2.9 2.2l1.6 6.3A2 2 0 0 1 19.4 14H14l.8 3.5a2.3 2.3 0 0 1-4.1 1.8L7 13.8V4a1 1 0 0 1 1-1zM2.5 4h2.5v10H2.5A.5.5 0 0 1 2 13.5v-9a.5.5 0 0 1 .5-.5z" />
+      <path d="M8.4 3.4h8.8a3 3 0 0 1 2.9 2.2l1.6 6.3A2 2 0 0 1 19.8 14.4H14.4l.8 3.5a2.3 2.3 0 0 1-4.1 1.8L7.4 14.2V4.4a1 1 0 0 1 1-1zM2.9 4.4h2.5v10H2.9a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5z" />
     </Fill>
   )
 }
@@ -176,7 +181,7 @@ export function HandThumbDownFillIcon(p: IconProps) {
 export function ChevronRightIcon({ size = 12 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flex: 'none' }}>
-      <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.2 2.5L7.7 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -212,7 +217,7 @@ export function Tile({ color, icon, size = 22 }: { color: string; icon: React.Re
 export function MusicNoteFillIcon(p: IconProps) {
   return (
     <Fill {...p}>
-      <path d="M19.5 2.6a1 1 0 0 1 1.3 1V16a3.5 3.5 0 1 1-2-3.2V8.3L9.5 10.6v7.9a3.5 3.5 0 1 1-2-3.2V6.4a1 1 0 0 1 .8-1z" />
+      <path d="M19.55 5.85V3.65L20.85 4.85v2.2zM9.55 17.05v-11.2h1.3v11.2zM19.55 17.05v-12.2h1.3v12.2zM9.7 17.05a3.3 3.3 0 1 1-6.6 0 3.3 3.3 0 1 1 6.6 0zM19.7 17.05a3.3 3.3 0 1 1-6.6 0 3.3 3.3 0 1 1 6.6 0z" />
     </Fill>
   )
 }
@@ -260,7 +265,17 @@ export function ListIcon(p: IconProps) {
 export function ChevronLeftIcon({ size = 12 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flex: 'none', display: 'block' }}>
-      <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7.8 2.5L4.3 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** doc.on.doc: copy */
+export function CopyIcon({ size = 14, color = 'currentColor' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" aria-hidden style={{ flex: 'none', display: 'block' }}>
+      <rect x="8.5" y="8.5" width="12" height="12.5" rx="2.6" />
+      <path d="M15.5 8.5V5.6A2.6 2.6 0 0 0 12.9 3H6.1A2.6 2.6 0 0 0 3.5 5.6v7.8A2.6 2.6 0 0 0 6.1 16h2.4" />
     </svg>
   )
 }

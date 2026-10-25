@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { get, put, stream, type Claim, type Profile, type Status, type Title } from '../lib/api'
+import { useDemo } from '../lib/demo'
+import { toast } from '../lib/toast'
 import { reltime } from '../lib/format'
 import { morph } from '../lib/vt'
 import { CheckDraw, PencilFillIcon, PlusIcon, SparklesFillIcon, Spinner, Tile, XmarkIcon } from '../components/Icons'
+import { models, shortName } from '../lib/models'
 
 interface Data {
   profile: Profile | null
@@ -25,6 +28,9 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
   const [draft, setDraft] = useState('')
   const [running, setRunning] = useState<RunStep[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const demo = useDemo()
+  // claims added by a background rewrite the user hasn't seen yet
+  const [fresh, setFresh] = useState<{ texts: Set<string>; added: number; removed: number } | null>(null)
 
   const load = useCallback(async () => {
     setData(await get<Data>('/profile'))
@@ -32,6 +38,20 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
   useEffect(() => {
     load().catch(() => {})
   }, [load])
+
+  // a rewrite finished in the background: reload, and point out what changed
+  const wasAuto = useRef(status.profile_auto)
+  useEffect(() => {
+    if (wasAuto.current && !status.profile_auto) load().catch(() => {})
+    wasAuto.current = status.profile_auto
+  }, [status.profile_auto, load])
+  useEffect(() => {
+    const p = data?.profile
+    if (!p || !status.profile_unseen) return
+    const d = p.stats.diff
+    setFresh({ texts: new Set(d?.added_texts ?? []), added: d?.added ?? 0, removed: d?.removed ?? 0 })
+    put('/profile/seen', {}).then(onChanged).catch(() => {})
+  }, [data, status.profile_unseen, onChanged])
 
   const save = async (doc: Profile['doc']) => {
     await put('/profile', { doc })
@@ -56,11 +76,18 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
     await save(doc)
   }
 
-  const remove = async (key: string, i: number) => {
+  // shown removed at once, saved when the toast goes, so 撤销 can bring it back
+  const remove = (key: string, i: number) => {
     if (!data?.profile) return
+    const before = data
     const doc: Profile['doc'] = JSON.parse(JSON.stringify(data.profile.doc))
-    doc.sections.find((s) => s.key === key)!.claims.splice(i, 1)
-    await save(doc)
+    const [gone] = doc.sections.find((s) => s.key === key)!.claims.splice(i, 1)
+    setData({ ...data, profile: { ...data.profile, doc } })
+    toast({
+      text: `已删除“${gone.text.length > 18 ? gone.text.slice(0, 18) + '…' : gone.text}”`,
+      commit: () => save(doc),
+      undo: () => setData(before),
+    })
   }
 
   const consolidate = async () => {
@@ -96,9 +123,9 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
           </span>
           <div className="title-row">
             <h1 className="page-title">你的口味</h1>
-            {p && !running && (
+            {!running && !status.profile_auto && (
               <button className="pill-sm" onClick={consolidate} data-consolidate>
-                重新整理
+                {p ? '重新整理' : '整理画像'}
               </button>
             )}
           </div>
@@ -113,8 +140,9 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
                   <span className="prop-label">依据</span>
                   <span className="prop-value">
                     {p.stats.records} 条记录
-                    {p.stats.prompt_tokens ? `，读入 ${p.stats.prompt_tokens.toLocaleString()} 个 token` : ''}
-                    {p.stats.seconds ? `，用时 ${p.stats.seconds} 秒` : ''}
+                    {demo && p.stats.prompt_tokens ? `，读入 ${p.stats.prompt_tokens.toLocaleString()} 个 token` : ''}
+                    {demo && p.stats.seconds ? `，用时 ${p.stats.seconds} 秒` : ''}
+                    {demo && p.stats.model ? `，${p.stats.model}` : ''}
                   </span>
                 </div>
               )}
@@ -154,13 +182,32 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
           <div className="empty-note secondary">还没有口味画像。看完、读完或听完几部，打个分、说说感受后，点“重新整理”。</div>
         )}
 
-        {p && !running && status.stale > 0 && (
+        {p && !running && status.profile_auto && (
+          <div className="callout stale-bar" data-profile-auto>
+            <span className="said-ic" style={{ marginTop: 3 }}>
+              <Spinner size={14} />
+            </span>
+            <div style={{ flex: 1 }}>正在把新记录整理进画像，好了这一页会自己更新。</div>
+          </div>
+        )}
+        {p && !running && !status.profile_auto && fresh && (fresh.added > 0 || fresh.removed > 0) && (
+          <div className="callout stale-bar" data-profile-fresh>
+            <span className="said-ic" style={{ marginTop: 3 }}>
+              <SparklesFillIcon size={15} />
+            </span>
+            <div style={{ flex: 1 }}>
+              片刻在空闲时重新整理了画像，新增 {fresh.added} 条，去掉 {fresh.removed} 条。新加的条目下面标了出来。
+            </div>
+          </div>
+        )}
+        {p && !running && !status.profile_auto && !fresh && status.stale > 0 && (
           <div className="callout stale-bar">
             <span className="said-ic" style={{ marginTop: 3 }}>
               <SparklesFillIcon size={15} />
             </span>
             <div style={{ flex: 1 }}>
-              有 {status.stale} 条新记录还没整理进画像。整理时，4B 模型会把全部记录完整读一遍。
+              有 {status.stale} 条新记录还没整理进画像。片刻会在你不用它的时候自动整理
+              {demo ? `，${shortName(models().big)} 会把全部记录完整读一遍` : ''}，也可以现在就整理。
             </div>
             <button className="link-accent t13" onClick={consolidate}>
               现在整理
@@ -186,6 +233,7 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
                     <ClaimRow
                       key={`${i}-${c.text}`}
                       c={c}
+                      isNew={!!fresh?.texts.has(c.text)}
                       titles={data!.titles}
                       onEdit={() => {
                         setDraft(c.text)
@@ -226,11 +274,13 @@ export default function ProfilePage({ status, onChanged }: { status: Status; onC
 
 function ClaimRow({
   c,
+  isNew,
   titles,
   onEdit,
   onRemove,
 }: {
   c: Claim
+  isNew: boolean
   titles: Record<string, Title>
   onEdit: () => void
   onRemove: () => void
@@ -240,8 +290,9 @@ function ClaimRow({
       <span className="claim-bullet" />
       <div className="claim-body">
         <div className="claim-text">{c.text}</div>
-        {(c.evidence.length > 0 || c.user) && (
+        {(c.evidence.length > 0 || c.user || isNew) && (
           <div className="claim-ev">
+            {isNew && <span className="mine claim-new">这次新加</span>}
             {c.user && <span className="mine">你改过</span>}
             {c.evidence.map((e) => (
               <span key={e} className="ev-chip">
